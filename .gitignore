@@ -15,26 +15,19 @@ pnpm-lock.yaml
 
 
 # ------------------------------
-# VARIABLES DE ENTORNO Y SEGURIDAD
+# SEGURIDAD Y ENTORNO
 # ------------------------------
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
 .env.*.local
-
-# Archivos con datos sensibles
 *.pem
 *.key
-*.cert
 *.secret
 
 
 # ------------------------------
-# ARCHIVOS DEL SISTEMA Y EDITORES
+# SISTEMA Y EDITORES
 # ------------------------------
-# Sistemas operativos
 .DS_Store
 .DS_Store?
 ._*
@@ -44,13 +37,7 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 $RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
 
-# Editores de código
 .vscode/
 .idea/
 .sublime-project
@@ -59,30 +46,10 @@ $RECYCLE.BIN/
 *.swo
 *~
 
-# Logs y archivos temporales
-*.log
-*.log.*
-tmp/
-temp/
-*.tmp
-*.temp
-
 
 # ------------------------------
 # ARCHIVOS ESPECÍFICOS DEL PROYECTO
 # ------------------------------
-# Base de datos temporal (si la añades después)
-*.db
-*.sqlite
-*.sqlite3
-
-# Archivos de caché
-.cache/
-dist/
-build/
-
-# Archivos de exportación o respaldos
-*.bak
-*.backup
-*.zip
-*.rar
+*.log
+tmp/
+temp/
