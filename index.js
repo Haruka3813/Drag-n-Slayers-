@@ -8,24 +8,30 @@ require('dotenv').config();
 // ------------------------------
 const app = express();
 app.get('/', (req, res) => {
-  res.send('✅ Bot Fairy slayers listo y funcionando!');
+  res.send('✅ Bot Fairy Tail Activo | Comandos / disponibles!');
 });
 app.listen(process.env.PORT || 3000, () => {
-  console.log(`📡 Servidor web en puerto ${process.env.PORT || 3000}`);
+  console.log(`📡 Servidor web corriendo en puerto ${process.env.PORT || 3000}`);
 });
 
 // ------------------------------
-// CONFIGURACIÓN DEL BOT DE DISCORD
+// CONFIGURACIÓN DEL BOT DISCORD
 // ------------------------------
-// Intents VÁLIDOS (sin errores de BitField)
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,          // Intent válido
-    GatewayIntentBits.MessageContent    // Intent válido (sin "Intent" al final)
+    GatewayIntentBits.Guilds,          
+    GatewayIntentBits.MessageContent    
   ]
 });
 
-// Comandos de ejemplo
+// ------------------------------
+// DATOS DEL SERVIDOR Y COMANDOS
+// ------------------------------
+// ID DE TU SERVIDOR YA PUESTO: 1461066789545836793
+const GUILD_ID = "1461066789545836793"; 
+const APP_ID = client.user?.id;
+
+// COMANDOS SLASH ACTUALIZADOS
 const commands = [
   {
     name: 'ayuda',
@@ -33,29 +39,54 @@ const commands = [
   },
   {
     name: 'perfil',
-    description: 'Muestra el perfil de tu personaje'
+    description: 'Muestra tu perfil de Fairy Tail'
+  },
+  {
+    name: 'elegirmagia',
+    description: 'Crea tu personaje y elige tu magia'
   }
 ];
 
 // ------------------------------
-// EVENTOS DEL BOT
+// SINCRONIZAR COMANDOS EN TU SERVIDOR
 // ------------------------------
-client.on('ready', () => {
+client.on('ready', async () => {
   console.log(`✅ Bot conectado como ${client.user.tag}`);
   
-  // Sincronizar comandos (sin errores)
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-  rest.put(
-    Routes.applicationCommands(client.user.id),
+  
+  // Actualizar comandos DIRECTAMENTE EN TU SERVIDOR
+  await rest.put(
+    Routes.applicationGuildCommands(APP_ID, GUILD_ID),
     { body: commands }
-  ).then(() => console.log('✅ Comandos sincronizados correctamente'))
-  .catch(err => console.error('❌ Error al sincronizar:', err.message));
+  ).then(() => {
+    console.log('✅ Comandos actualizados en el servidor!');
+  }).catch(err => {
+    console.error('❌ Error al sincronizar comandos:', err.message);
+  });
 });
 
 // ------------------------------
-// INICIAR EL BOT
+// ESCUCHAR COMANDOS
 // ------------------------------
-client.login(process.env.TOKEN).catch(err => {
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  switch(interaction.commandName) {
+    case 'ayuda':
+      await interaction.reply('📚 **AYUDA BOT FAIRY TAIL**\n/perfil → Ver tu personaje\n/elegirmagia → Crear personaje');
+      break;
+    case 'perfil':
+      await interaction.reply('👤 Tu perfil se está cargando...');
+      break;
+  }
+});
+
+// ------------------------------
+// INICIAR BOT CON DATOS CORRECTOS
+// ------------------------------
+client.login(process.env.TOKEN).then(() => {
+  console.log('✅ Bot en línea y listo!');
+}).catch(err => {
   console.error('❌ Error al iniciar:', err.message);
-  console.log('💡 Revisa los intents y la versión de Node.js');
 });
