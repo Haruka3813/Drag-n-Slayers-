@@ -1,7 +1,6 @@
 {
-  "name": "Fairy-slayer-Bot",
+  "name": "fairy-slayer-discord-bot",
   "version": "1.0.0",
-  "description": "Bot de Discord temático de Fairy slayer",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
