@@ -1,233 +1,287 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, SlashCommandBuilder, Routes } = require('discord.js');
-const { createClient } = require('@supabase/supabase-js');
-const { REST } = require('@discordjs/rest');
+const express = require("express");
+const { 
+  Client, 
+  GatewayIntentBits, 
+  REST, 
+  Routes, 
+  SlashCommandBuilder,
+  EmbedBuilder
+} = require("discord.js");
+const { createClient } = require("@supabase/supabase-js");
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds]
+  intents: [GatewayIntentBits.Guilds]
 });
+
+const app = express();
+app.get("/", (req, res) => res.send("MMO Online"));
+app.listen(10000, () => console.log("Servidor web activo"));
 
 const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_KEY
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
 );
 
-const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
-const XP_POR_NIVEL = 100;
+/* =========================
+   SISTEMA BASE
+========================= */
 
-/* ===============================
-   IA PROGRESIVA
-================================ */
-
-function escalarEnemigo(nivelJugador) {
-    return {
-        vida: 80 + nivelJugador * 20,
-        daño: 10 + nivelJugador * 5,
-        recompensa: 50 + nivelJugador * 25
-    };
+function dañoBase(clase) {
+  if (clase === "Guerrero") return 15;
+  if (clase === "Mago") return 12;
+  if (clase === "Arquero") return 18;
+  return 10;
 }
 
-/* ===============================
-   FUNCIONES BASE
-================================ */
-
-async function obtenerJugador(userId) {
-    let { data } = await supabase.from('players').select('*').eq('id', userId).single();
-
-    if (!data) {
-        const nuevo = {
-            id: userId,
-            nivel: 1,
-            xp: 0,
-            oro: 100,
-            banco: 0,
-            arma_equipped: null,
-            mascota_activa: null,
-            rango: "Novato",
-            vida: 100
-        };
-
-        await supabase.from('players').insert(nuevo);
-        return nuevo;
-    }
-
-    return data;
+function rarezaRandom() {
+  const r = Math.random();
+  if (r < 0.5) return "Comun";
+  if (r < 0.75) return "Raro";
+  if (r < 0.9) return "Epico";
+  if (r < 0.98) return "Legendario";
+  return "UR";
 }
 
-async function agregarXP(userId, cantidad) {
-    let j = await obtenerJugador(userId);
-    let xp = j.xp + cantidad;
-    let nivel = j.nivel;
-
-    while (xp >= XP_POR_NIVEL) {
-        xp -= XP_POR_NIVEL;
-        nivel++;
-    }
-
-    await supabase.from('players')
-        .update({ xp, nivel })
-        .eq('id', userId);
+function rangoPorNivel(nivel) {
+  if (nivel >= 30) return "Maestro";
+  if (nivel >= 20) return "Elite";
+  if (nivel >= 10) return "Avanzado";
+  return "Novato";
 }
 
-/* ===============================
+/* =========================
    COMANDOS
-================================ */
+========================= */
 
 const commands = [
+  new SlashCommandBuilder()
+    .setName("crear")
+    .setDescription("Crear personaje")
+    .addStringOption(o =>
+      o.setName("clase")
+        .setDescription("Elige clase")
+        .setRequired(true)
+        .addChoices(
+          { name: "Guerrero", value: "Guerrero" },
+          { name: "Mago", value: "Mago" },
+          { name: "Arquero", value: "Arquero" }
+        )
+    ),
 
-    new SlashCommandBuilder().setName('perfil').setDescription('Ver perfil'),
+  new SlashCommandBuilder().setName("perfil").setDescription("Ver perfil"),
+  new SlashCommandBuilder().setName("combatir").setDescription("Pelear contra enemigo"),
+  new SlashCommandBuilder().setName("balance").setDescription("Ver dinero"),
+  new SlashCommandBuilder().setName("depositar")
+    .setDescription("Depositar al banco")
+    .addIntegerOption(o => o.setName("cantidad").setRequired(true)),
+  new SlashCommandBuilder().setName("retirar")
+    .setDescription("Retirar del banco")
+    .addIntegerOption(o => o.setName("cantidad").setRequired(true)),
+  new SlashCommandBuilder().setName("ranking").setDescription("Top jugadores"),
+  new SlashCommandBuilder().setName("duelo")
+    .setDescription("Retar jugador")
+    .addUserOption(o => o.setName("usuario").setRequired(true))
+].map(c => c.toJSON());
 
-    new SlashCommandBuilder().setName('combatir').setDescription('Pelear PvE'),
-
-    new SlashCommandBuilder()
-        .setName('pvp')
-        .setDescription('Pelear contra jugador')
-        .addUserOption(o => o.setName('rival').setRequired(true)),
-
-    new SlashCommandBuilder()
-        .setName('mazmorra')
-        .setDescription('Entrar a mazmorra cooperativa'),
-
-    new SlashCommandBuilder()
-        .setName('vender')
-        .setDescription('Vender item en mercado')
-        .addStringOption(o => o.setName('item_id').setRequired(true))
-        .addIntegerOption(o => o.setName('precio').setRequired(true)),
-
-    new SlashCommandBuilder()
-        .setName('comprar')
-        .setDescription('Comprar del mercado')
-        .addStringOption(o => o.setName('id').setRequired(true)),
-
-    new SlashCommandBuilder().setName('ranking').setDescription('Top jugadores'),
-
-    new SlashCommandBuilder().setName('tienda').setDescription('Ver tienda global')
-];
-
-const rest = new REST({ version: '10' }).setToken(TOKEN);
-
-(async () => {
-    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-})();
-
-/* ===============================
-   EVENTOS
-================================ */
-
-client.on('interactionCreate', async interaction => {
-
-    if (!interaction.isChatInputCommand()) return;
-    const userId = interaction.user.id;
-
-    /* PERFIL */
-    if (interaction.commandName === 'perfil') {
-        const j = await obtenerJugador(userId);
-        return interaction.reply(
-            `Nivel: ${j.nivel}\nOro: ${j.oro}\nVida: ${j.vida}`
-        );
-    }
-
-    /* PVE IA PROGRESIVA */
-    if (interaction.commandName === 'combatir') {
-        const j = await obtenerJugador(userId);
-        const enemigo = escalarEnemigo(j.nivel);
-
-        await supabase.rpc('sumar_oro', { uid: userId, cantidad: enemigo.recompensa });
-        await agregarXP(userId, 40);
-
-        return interaction.reply(
-            `Derrotaste enemigo escalado!\nGanaste ${enemigo.recompensa} oro`
-        );
-    }
-
-    /* PVP REAL */
-    if (interaction.commandName === 'pvp') {
-        const rival = interaction.options.getUser('rival');
-        const j1 = await obtenerJugador(userId);
-        const j2 = await obtenerJugador(rival.id);
-
-        const poder1 = j1.nivel * 10;
-        const poder2 = j2.nivel * 10;
-
-        const ganador = poder1 >= poder2 ? userId : rival.id;
-
-        await supabase.rpc('sumar_oro', { uid: ganador, cantidad: 100 });
-
-        return interaction.reply(
-            `Ganador: <@${ganador}>`
-        );
-    }
-
-    /* MAZMORRA COOP */
-    if (interaction.commandName === 'mazmorra') {
-        const j = await obtenerJugador(userId);
-
-        const vidaBoss = 300 + j.nivel * 30;
-        const recompensa = 500 + j.nivel * 50;
-
-        await supabase.rpc('sumar_oro', { uid: userId, cantidad: recompensa });
-        await agregarXP(userId, 100);
-
-        return interaction.reply(
-            `Mazmorra completada!\nGanaste ${recompensa} oro`
-        );
-    }
-
-    /* MERCADO */
-    if (interaction.commandName === 'vender') {
-        const itemId = interaction.options.getString('item_id');
-        const precio = interaction.options.getInteger('precio');
-
-        await supabase.from('mercado').insert({
-            vendedor: userId,
-            item_id: itemId,
-            precio
-        });
-
-        return interaction.reply("Item puesto en mercado.");
-    }
-
-    if (interaction.commandName === 'comprar') {
-        const id = interaction.options.getString('id');
-
-        const { data } = await supabase.from('mercado')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (!data) return interaction.reply("No existe.");
-
-        await supabase.rpc('sumar_oro', { uid: data.vendedor, cantidad: data.precio });
-
-        await supabase.from('mercado').delete().eq('id', id);
-
-        return interaction.reply("Compra realizada.");
-    }
-
-    /* RANKING */
-    if (interaction.commandName === 'ranking') {
-        const { data } = await supabase
-            .from('players')
-            .select('*')
-            .order('nivel', { ascending: false })
-            .limit(10);
-
-        const top = data.map((p, i) => `${i + 1}. <@${p.id}> - Nivel ${p.nivel}`).join("\n");
-
-        return interaction.reply(top);
-    }
-
-    /* TIENDA GLOBAL */
-    if (interaction.commandName === 'tienda') {
-        const { data } = await supabase.from('items').select('*').limit(10);
-
-        const lista = data.map(i => `${i.nombre} - ${i.rareza}`).join("\n");
-
-        return interaction.reply(lista);
-    }
-
+client.once("clientReady", async () => {
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+  console.log("Comandos registrados");
 });
 
-client.login(TOKEN);
+/* =========================
+   INTERACCIONES
+========================= */
+
+client.on("interactionCreate", async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+  const userId = interaction.user.id;
+
+  /* CREAR */
+  if (interaction.commandName === "crear") {
+    const clase = interaction.options.getString("clase");
+
+    const { data } = await supabase
+      .from("players")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (data) return interaction.reply("Ya tienes personaje.");
+
+    await supabase.from("players").insert({
+      id: userId,
+      clase,
+      nivel: 1,
+      xp: 0,
+      oro: 100,
+      vida: 100,
+      mana: 50
+    });
+
+    return interaction.reply(`Personaje creado como ${clase}`);
+  }
+
+  /* PERFIL */
+  if (interaction.commandName === "perfil") {
+    const { data } = await supabase
+      .from("players")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (!data) return interaction.reply("No tienes personaje.");
+
+    const embed = new EmbedBuilder()
+      .setTitle("Perfil MMO")
+      .addFields(
+        { name: "Clase", value: data.clase, inline: true },
+        { name: "Nivel", value: data.nivel.toString(), inline: true },
+        { name: "Rango", value: rangoPorNivel(data.nivel), inline: true },
+        { name: "XP", value: data.xp.toString(), inline: true },
+        { name: "Oro", value: data.oro.toString(), inline: true },
+        { name: "Banco", value: data.banco.toString(), inline: true }
+      );
+
+    return interaction.reply({ embeds: [embed] });
+  }
+
+  /* COMBATE */
+  if (interaction.commandName === "combatir") {
+    const { data } = await supabase
+      .from("players")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (!data) return interaction.reply("No tienes personaje.");
+
+    const enemigoVida = 50 + data.nivel * 10;
+    const dañoJugador = dañoBase(data.clase) + Math.floor(Math.random() * 10);
+    const dañoEnemigo = Math.floor(Math.random() * 15);
+
+    const gana = dañoJugador >= dañoEnemigo;
+
+    let nuevaXP = data.xp;
+    let nuevoOro = data.oro;
+
+    if (gana) {
+      nuevaXP += 50;
+      nuevoOro += 30;
+    }
+
+    let nuevoNivel = data.nivel;
+    if (nuevaXP >= nuevoNivel * 100) {
+      nuevoNivel++;
+      nuevaXP = 0;
+    }
+
+    await supabase.from("players")
+      .update({
+        xp: nuevaXP,
+        nivel: nuevoNivel,
+        oro: nuevoOro
+      })
+      .eq("id", userId);
+
+    return interaction.reply(
+      gana
+        ? `⚔ Ganaste! +50 XP +30 Oro`
+        : `💀 Perdiste contra el enemigo`
+    );
+  }
+
+  /* BALANCE */
+  if (interaction.commandName === "balance") {
+    const { data } = await supabase
+      .from("players")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    return interaction.reply(`💰 Oro: ${data.oro}\n🏦 Banco: ${data.banco}`);
+  }
+
+  /* DEPOSITAR */
+  if (interaction.commandName === "depositar") {
+    const cantidad = interaction.options.getInteger("cantidad");
+
+    const { data } = await supabase
+      .from("players")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (data.oro < cantidad) return interaction.reply("No tienes suficiente oro.");
+
+    await supabase.from("players")
+      .update({
+        oro: data.oro - cantidad,
+        banco: data.banco + cantidad
+      })
+      .eq("id", userId);
+
+    return interaction.reply(`Depositaste ${cantidad}`);
+  }
+
+  /* RETIRAR */
+  if (interaction.commandName === "retirar") {
+    const cantidad = interaction.options.getInteger("cantidad");
+
+    const { data } = await supabase
+      .from("players")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (data.banco < cantidad) return interaction.reply("No tienes suficiente en banco.");
+
+    await supabase.from("players")
+      .update({
+        oro: data.oro + cantidad,
+        banco: data.banco - cantidad
+      })
+      .eq("id", userId);
+
+    return interaction.reply(`Retiraste ${cantidad}`);
+  }
+
+  /* RANKING */
+  if (interaction.commandName === "ranking") {
+    const { data } = await supabase
+      .from("players")
+      .select("*")
+      .order("nivel", { ascending: false })
+      .limit(5);
+
+    let texto = "";
+    data.forEach((p, i) => {
+      texto += `#${i + 1} Nivel ${p.nivel}\n`;
+    });
+
+    return interaction.reply(`🏆 Top Jugadores\n${texto}`);
+  }
+
+  /* DUELO SIMPLE */
+  if (interaction.commandName === "duelo") {
+    const usuario = interaction.options.getUser("usuario");
+    if (usuario.id === userId) return interaction.reply("No puedes retarte.");
+
+    const { data: p1 } = await supabase.from("players").select("*").eq("id", userId).single();
+    const { data: p2 } = await supabase.from("players").select("*").eq("id", usuario.id).single();
+
+    if (!p1 || !p2) return interaction.reply("Ambos deben tener personaje.");
+
+    const daño1 = dañoBase(p1.clase) + Math.random() * 10;
+    const daño2 = dañoBase(p2.clase) + Math.random() * 10;
+
+    const ganador = daño1 > daño2 ? interaction.user.username : usuario.username;
+
+    return interaction.reply(`⚔ Duelo!\nGanador: ${ganador}`);
+  }
+});
+
+client.login(process.env.TOKEN);
