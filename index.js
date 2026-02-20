@@ -345,4 +345,5 @@ Recompensa: ${m.recompensa_oro} oro / ${m.recompensa_xp} XP\n\n`;
     });
 
     return interaction.editReply(texto);
-  }
+  });
+client.login(process.env.TOKEN);
