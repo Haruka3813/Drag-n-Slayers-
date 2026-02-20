@@ -3,41 +3,25 @@ const express = require("express");
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
 const { createClient } = require("@supabase/supabase-js");
 
-// ==================
-// Validar token
-// ==================
 if (!process.env.TOKEN) {
   console.log("❌ TOKEN no encontrado en Environment Variables");
   process.exit(1);
 }
 
-// ==================
-// Cliente Discord
-// ==================
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// ==================
-// Servidor web
-// ==================
 const app = express();
-app.get("/", (req, res) => res.send("Fairy Slayers activo"));
+app.get("/", (req, res) => res.send("Fairy Slayers Fase 2 activo"));
 app.listen(10000, () => console.log("Servidor web activo en puerto 10000"));
 
-// ==================
-// Cliente Supabase
-// ==================
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
-
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const CLIENT_ID = process.env.CLIENT_ID;
 
-// ==================
-// Comandos
-// ==================
+// ==========================
+// Comandos slash
+// ==========================
 const commands = [
   new SlashCommandBuilder()
     .setName("elegirmagia")
@@ -54,7 +38,7 @@ const commands = [
     ),
   new SlashCommandBuilder()
     .setName("info")
-    .setDescription("Ver tu perfil"),
+    .setDescription("Ver tu perfil completo"),
   new SlashCommandBuilder()
     .setName("batalla")
     .setDescription("Buscar enemigo"),
@@ -65,16 +49,18 @@ const commands = [
     .setName("miau")
     .setDescription("Recibir mascota inicial"),
   new SlashCommandBuilder()
+    .setName("tienda")
+    .setDescription("Ver y comprar items"),
+  new SlashCommandBuilder()
     .setName("ayuda")
     .setDescription("Ver comandos")
 ].map(cmd => cmd.toJSON());
 
-// ==================
+// ==========================
 // Registrar comandos
-// ==================
+// ==========================
 client.once("ready", async () => {
   console.log(`✅ Bot conectado como ${client.user.tag}`);
-
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   await rest.put(
@@ -85,12 +71,23 @@ client.once("ready", async () => {
   console.log("✅ Comandos slash registrados");
 });
 
-// ==================
-// Manejo de comandos
-// ==================
+// ==========================
+// Funciones auxiliares
+// ==========================
+async function getPersonaje(userId) {
+  const { data } = await supabase
+    .from("personajes")
+    .select("*")
+    .eq("id", userId)
+    .single();
+  return data;
+}
+
+// ==========================
+// Interacciones
+// ==========================
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
-
   const userId = interaction.user.id;
 
   // --------------------
@@ -98,12 +95,7 @@ client.on("interactionCreate", async interaction => {
   // --------------------
   if (interaction.commandName === "elegirmagia") {
     const magia = interaction.options.getString("tipo");
-
-    const { data, error } = await supabase
-      .from("personajes")
-      .select("*")
-      .eq("id", userId)
-      .single();
+    const data = await getPersonaje(userId);
 
     if (data) return interaction.reply("Ya tienes personaje creado.");
 
@@ -115,7 +107,10 @@ client.on("interactionCreate", async interaction => {
       oro: 0,
       vida: 500,
       maxvida: 500,
-      lastbatalla: Date.now()
+      lastbatalla: Date.now(),
+      mascotas: [],
+      arma_equipada: null,
+      regeneracion: Date.now()
     });
 
     if (insertError) {
@@ -130,13 +125,11 @@ client.on("interactionCreate", async interaction => {
   // Info
   // --------------------
   if (interaction.commandName === "info") {
-    const { data } = await supabase
-      .from("personajes")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
+    const data = await getPersonaje(userId);
     if (!data) return interaction.reply("No tienes personaje.");
+
+    const mascotas = data.mascotas?.map(m => `${m.nombre} (${m.tipo})`).join(", ") || "Ninguna";
+    const arma = data.arma_equipada || "Ninguna";
 
     return interaction.reply(
       `📜 **Perfil**
@@ -144,23 +137,28 @@ Magia: ${data.magia}
 Nivel: ${data.nivel}
 XP: ${data.xp}
 Oro: ${data.oro}
-Vida: ${data.vida}/${data.maxvida}`
+Vida: ${data.vida}/${data.maxvida}
+Arma equipada: ${arma}
+Mascotas: ${mascotas}`
     );
   }
 
   // --------------------
-  // Batalla
+  // Batalla PvE (simplificada)
   // --------------------
   if (interaction.commandName === "batalla") {
-    const { data } = await supabase
-      .from("personajes")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
+    const data = await getPersonaje(userId);
     if (!data) return interaction.reply("No tienes personaje.");
 
-    let nuevaVida = data.vida - 100;
+    // Vida regenerada automáticamente según tiempo
+    const tiempoPasado = Date.now() - data.regeneracion;
+    const vidaRecuperada = Math.floor(tiempoPasado / 60000) * data.maxvida; // 1 min = 100% vida
+    let vidaActual = data.vida + vidaRecuperada;
+    if (vidaActual > data.maxvida) vidaActual = data.maxvida;
+
+    // Simular batalla
+    const dano = 100;
+    let nuevaVida = vidaActual - dano;
     if (nuevaVida < 0) nuevaVida = 0;
 
     await supabase.from("personajes")
@@ -168,7 +166,8 @@ Vida: ${data.vida}/${data.maxvida}`
         vida: nuevaVida,
         xp: data.xp + 100,
         oro: data.oro + 50,
-        lastbatalla: Date.now()
+        lastbatalla: Date.now(),
+        regeneracion: Date.now()
       })
       .eq("id", userId);
 
@@ -185,12 +184,8 @@ Vida restante: ${nuevaVida}`
   // --------------------
   if (interaction.commandName === "betatester") {
     await supabase.from("personajes")
-      .update({
-        xp: 3000,
-        oro: 5000
-      })
+      .update({ xp: 3000, oro: 5000 })
       .eq("id", userId);
-
     return interaction.reply("🎁 Recompensa beta aplicada.");
   }
 
@@ -198,7 +193,28 @@ Vida restante: ${nuevaVida}`
   // Mascota inicial
   // --------------------
   if (interaction.commandName === "miau") {
-    return interaction.reply("🐾 Has recibido tu mascota UR inicial.");
+    const data = await getPersonaje(userId);
+    if (!data) return interaction.reply("No tienes personaje.");
+
+    const nuevaMascota = { id: `mascota_${Date.now()}`, nombre: "UR Inicial", tipo: "UR", bonus_vida: 50, bonus_xp: 50, bonus_oro: 50 };
+    const mascotasActuales = data.mascotas || [];
+    mascotasActuales.push(nuevaMascota);
+
+    await supabase.from("personajes")
+      .update({ mascotas: mascotasActuales })
+      .eq("id", userId);
+
+    return interaction.reply(`🐾 Has recibido tu mascota UR: ${nuevaMascota.nombre}`);
+  }
+
+  // --------------------
+  // Tienda
+  // --------------------
+  if (interaction.commandName === "tienda") {
+    // Ejemplo simplificado
+    const items = await supabase.from("items").select("*").limit(10);
+    let lista = items.data.map(i => `${i.nombre} (${i.rareza})`).join("\n") || "No hay items disponibles";
+    return interaction.reply(`🛒 **Tienda**\n${lista}`);
   }
 
   // --------------------
@@ -206,18 +222,16 @@ Vida restante: ${nuevaVida}`
   // --------------------
   if (interaction.commandName === "ayuda") {
     return interaction.reply(
-`📘 Fairy Slayers
+`📘 Fairy Slayers Fase 2
 
 /elegirmagia
 /info
 /batalla
 /betatester
-/miau`
+/miau
+/tienda`
     );
   }
 });
 
-// ==================
-// Login
-// ==================
 client.login(process.env.TOKEN);
