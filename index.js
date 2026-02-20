@@ -19,7 +19,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const raridades = ["Común", "Raro", "Beryraro", "Épico", "Ultra Épico", "Legendario", "UR"];
 
 // -----------------
-// Objetos de ejemplo
+// Loot de ejemplo
 // -----------------
 const armas = [
   { nombre: "Espada de fuego", tipo: "arma", nivel: 1, raridad: "Común" },
@@ -39,6 +39,18 @@ const mascotas = [
   { nombre: "Fénix", tipo: "UR" }
 ];
 
+const enemigos = [
+  { nombre: "Slime Verde", nivel: 1, oro: 50, xp: 50, loot: ["Espada de fuego"] },
+  { nombre: "Goblin Guerrero", nivel: 5, oro: 150, xp: 150, loot: ["Armadura ligera"] },
+  { nombre: "Dragón de Hielo", nivel: 50, oro: 500, xp: 500, loot: ["Martillo UR", "Fénix"] }
+];
+
+const misiones = [
+  { nombre: "Salvar el pueblo", xp: 100, oro: 100, loot: ["Espada de fuego"] },
+  { nombre: "Recolectar cristales", xp: 200, oro: 200, loot: ["Armadura mística"] },
+  { nombre: "Derrotar al Dragón", xp: 1000, oro: 1000, loot: ["Martillo UR", "Fénix"] }
+];
+
 // -----------------
 // Comandos Slash
 // -----------------
@@ -51,8 +63,8 @@ const commands = [
         { name: "Mago Oscuro", value: "oscuro" }
       )),
   new SlashCommandBuilder().setName("info").setDescription("Ver tu perfil"),
-  new SlashCommandBuilder().setName("batalla").setDescription("Buscar enemigo PvP o PvE"),
-  new SlashCommandBuilder().setName("aventura").setDescription("Modo aventura automática"),
+  new SlashCommandBuilder().setName("batalla").setDescription("Buscar enemigo PvE"),
+  new SlashCommandBuilder().setName("aventura").setDescription("Misiones automáticas"),
   new SlashCommandBuilder().setName("tienda").setDescription("Ver y comprar items"),
   new SlashCommandBuilder().setName("use").setDescription("Usar item de la mochila")
     .addStringOption(opt => opt.setName("item").setDescription("Nombre del item").setRequired(true)),
@@ -64,10 +76,6 @@ const commands = [
     .addStringOption(opt => opt.setName("nombre").setDescription("nombre del item/mascota").setRequired(true)),
   new SlashCommandBuilder().setName("minar").setDescription("Minar recursos"),
   new SlashCommandBuilder().setName("pescar").setDescription("Pescar recursos"),
-  new SlashCommandBuilder().setName("gremio").setDescription("Ver, crear o unirse a gremio")
-    .addStringOption(opt => opt.setName("accion").setDescription("crear/unirse/ver").setRequired(true))
-    .addStringOption(opt => opt.setName("nombre").setDescription("nombre del gremio")),
-  new SlashCommandBuilder().setName("sorteo").setDescription("Sorteos automáticos"),
   new SlashCommandBuilder().setName("ayuda").setDescription("Ver comandos")
 ].map(cmd => cmd.toJSON());
 
@@ -104,6 +112,8 @@ async function agregarItem(userId, itemNombre, cantidad = 1) {
 }
 
 function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+function getRandomElement(array) { return array[getRandomInt(0, array.length-1)]; }
 
 // -----------------
 // Interacciones
@@ -155,7 +165,7 @@ Mascotas: ${mascotasStr}`
   // -----------------
   if (cmd === "minar") {
     const lugares = ["Mina del Norte", "Cueva Oscura", "Montaña de Fuego", "Abismo Misterioso"];
-    const lugar = lugares[getRandomInt(0, lugares.length-1)];
+    const lugar = getRandomElement(lugares);
     const oro = getRandomInt(50, 150);
     await actualizarPersonaje(userId, { oro: personaje.oro + oro });
     return interaction.reply(`⛏️ Has minado en ${lugar} y conseguido ${oro} de oro. Pico intacto.`);
@@ -166,68 +176,27 @@ Mascotas: ${mascotasStr}`
   // -----------------
   if (cmd === "pescar") {
     const lugares = ["Lago Cristalino", "Río Plateado", "Mar de Tempestad"];
-    const lugar = lugares[getRandomInt(0, lugares.length-1)];
+    const lugar = getRandomElement(lugares);
     const oro = getRandomInt(50, 150);
     await actualizarPersonaje(userId, { oro: personaje.oro + oro });
     return interaction.reply(`🎣 Has pescado en ${lugar} y conseguido ${oro} de oro. Caña intacta.`);
   }
 
   // -----------------
-  // /use
+  // Aventura automática (misiones)
   // -----------------
-  if (cmd === "use") {
-    const itemNombre = interaction.options.getString("item");
-    const mochila = personaje.items || [];
-    const item = mochila.find(i => i.nombre === itemNombre);
-    if (!item || item.cantidad <= 0) return interaction.reply("No tienes ese item.");
-    item.cantidad -= 1;
-    const oro = personaje.oro + 50; // ejemplo efecto
-    await actualizarPersonaje(userId, { oro, items: mochila });
-    return interaction.reply(`✅ Usaste ${itemNombre}. Oro: ${oro}`);
+  if (cmd === "aventura") {
+    const mision = getRandomElement(misiones);
+    await agregarItem(userId, getRandomElement([...armas.map(a=>a.nombre), ...armaduras.map(a=>a.nombre), ...mascotas.map(m=>m.nombre)]));
+    await actualizarPersonaje(userId, {
+      xp: personaje.xp + mision.xp,
+      oro: personaje.oro + mision.oro
+    });
+    return interaction.reply(`🏰 Has completado la misión "${mision.nombre}"!
++${mision.xp} XP
++${mision.oro} Oro
+Loot: ${mision.loot.join(", ")}`);
   }
-
-  // -----------------
-  // /bag
-  // -----------------
-  if (cmd === "bag") {
-    const mochila = personaje.items || [];
-    if (!mochila.length) return interaction.reply("Tu mochila está vacía.");
-    const lista = mochila.map(i => `${i.nombre} x${i.cantidad}`).join("\n");
-    return interaction.reply(`🎒 Mochila:\n${lista}`);
-  }
-
-  // -----------------
-  // /balance
-  // -----------------
-  if (cmd === "balance") {
-    return interaction.reply(`💰 Oro: ${personaje.oro}\n🏦 Banco: ${personaje.oro_banco}`);
-  }
-
-  // -----------------
-  // /mascotas
-  // -----------------
-  if (cmd === "mascotas") {
-    const mascotas = personaje.mascotas || [];
-    if (!mascotas.length) return interaction.reply("No tienes mascotas.");
-    const lista = mascotas.map(m => `${m.nombre} (${m.tipo})`).join("\n");
-    return interaction.reply(`🐾 Mascotas:\n${lista}`);
-  }
-
-  // -----------------
-  // /equipar
-  // -----------------
-  if (cmd === "equipar") {
-    const tipo = interaction.options.getString("tipo");
-    const nombre = interaction.options.getString("nombre");
-    if (tipo === "arma") await actualizarPersonaje(userId, { arma_equipada: nombre });
-    else if (tipo === "armadura") await actualizarPersonaje(userId, { armadura_equipada: nombre });
-    else return interaction.reply("Tipo inválido. Usa arma o armadura.");
-    return interaction.reply(`✅ ${tipo} ${nombre} equipada.`);
-  }
-
-  // -----------------
-  // Aquí puedes expandir: batalla PvP/PvE completa, tienda, aventura automática, loot UR, gremios, sorteos
-  // -----------------
 });
 
 client.login(process.env.TOKEN);
