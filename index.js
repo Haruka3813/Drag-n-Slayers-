@@ -1,218 +1,198 @@
-import express from "express";
-import dotenv from "dotenv";
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from "discord.js";
-import { createClient } from "@supabase/supabase-js";
+require("dotenv").config();
 
-dotenv.config();
-
-/* ==========================
-   VALIDACIÓN DE VARIABLES
-========================== */
-
-if (!process.env.TOKEN) {
-  console.error("❌ TOKEN no encontrado en Environment Variables");
-  process.exit(1);
-}
-
-if (!process.env.CLIENT_ID) {
-  console.error("❌ CLIENT_ID no encontrado en Environment Variables");
-  process.exit(1);
-}
-
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-  console.error("❌ Supabase no configurado");
-  process.exit(1);
-}
-
-/* ==========================
-   EXPRESS (para Render)
-========================== */
+const { Client, GatewayIntentBits, REST, Routes } = require("discord.js");
+const { createClient } = require("@supabase/supabase-js");
+const express = require("express");
 
 const app = express();
-app.get("/", (req, res) => {
-  res.send("Fairy Slayers activo 🔥");
-});
+app.get("/", (req, res) => res.send("Fairy Slayers activo"));
 app.listen(10000, () => console.log("Servidor web activo en puerto 10000"));
 
-/* ==========================
-   SUPABASE
-========================== */
+if (!process.env.TOKEN) {
+  console.log("❌ TOKEN no encontrado en Environment Variables");
+  process.exit(1);
+}
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
 
-/* ==========================
-   DISCORD CLIENT
-========================== */
+function calcularVidaActual(personaje) {
+  const ahora = Date.now();
+  const tiempoPasado = (ahora - (personaje.last_battle || ahora)) / 1000;
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
+  const vidaMax = personaje.vida_max;
+  const regeneracionPorSegundo = vidaMax / 60;
 
-client.once("clientReady", () => {
-  console.log(`✅ Bot conectado como ${client.user.tag}`);
-});
+  let vida = personaje.vida + (tiempoPasado * regeneracionPorSegundo);
 
-/* ==========================
-   SLASH COMMANDS
-========================== */
+  if (vida > vidaMax) vida = vidaMax;
 
-const commands = [
-  new SlashCommandBuilder()
-    .setName("elegirmagia")
-    .setDescription("Elige tu magia inicial")
-    .addStringOption(option =>
-      option.setName("tipo")
-        .setDescription("Tipo de magia")
-        .setRequired(true)
-        .addChoices(
-          { name: "Dragón Slayer", value: "dragon" },
-          { name: "Celestial", value: "celestial" },
-          { name: "Oscura", value: "oscura" }
-        )
-    ),
+  return Math.floor(vida);
+}
 
-  new SlashCommandBuilder()
-    .setName("info")
-    .setDescription("Ver tu perfil"),
+const comandos = [
+  {
+    name: "elegirmagia",
+    description: "Elegir tu magia inicial",
+    options: [
+      {
+        name: "tipo",
+        description: "Tipo de magia",
+        type: 3,
+        required: true,
+        choices: [
+          { name: "Dragon Slayer", value: "dragon" },
+          { name: "Celestial", value: "celestial" }
+        ]
+      }
+    ]
+  },
+  {
+    name: "info",
+    description: "Ver tu personaje"
+  },
+  {
+    name: "batalla",
+    description: "Luchar contra un enemigo salvaje"
+  }
+];
 
-  new SlashCommandBuilder()
-    .setName("betatester")
-    .setDescription("Recompensa especial beta tester"),
+client.once("clientReady", async () => {
+  console.log(`✅ Conectado como ${client.user.tag}`);
 
-  new SlashCommandBuilder()
-    .setName("ayuda")
-    .setDescription("Lista de comandos")
-].map(cmd => cmd.toJSON());
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
-const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-
-(async () => {
   try {
-    console.log("🔄 Registrando comandos...");
     await rest.put(
       Routes.applicationCommands(process.env.CLIENT_ID),
-      { body: commands }
+      { body: comandos }
     );
     console.log("✅ Comandos slash registrados");
   } catch (error) {
     console.error(error);
   }
-})();
-
-/* ==========================
-   INTERACCIONES
-========================== */
+});
 
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  const userId = interaction.user.id;
-
-  /* ========= ELEGIR MAGIA ========= */
-
   if (interaction.commandName === "elegirmagia") {
     const magia = interaction.options.getString("tipo");
 
-    const { data: existing } = await supabase
-      .from("jugadores")
+    const { data: existente } = await supabase
+      .from("personajes")
       .select("*")
-      .eq("user_id", userId)
+      .eq("user_id", interaction.user.id)
       .single();
 
-    if (existing) {
-      return interaction.reply({
-        content: "❌ Ya tienes una magia elegida.",
-        ephemeral: true
-      });
+    if (existente) {
+      return interaction.reply("❌ Ya tienes personaje.");
     }
 
-    await supabase.from("jugadores").insert({
-      user_id: userId,
+    await supabase.from("personajes").insert({
+      user_id: interaction.user.id,
       magia: magia,
       nivel: 1,
       xp: 0,
       oro: 0,
       vida: 500,
       vida_max: 500,
-      ultima_accion: Date.now()
+      last_battle: Date.now()
     });
 
-    return interaction.reply(`🔥 Magia ${magia} elegida correctamente!`);
+    interaction.reply(`✨ Personaje creado con magia ${magia}`);
   }
-
-  /* ========= INFO ========= */
 
   if (interaction.commandName === "info") {
-    const { data } = await supabase
-      .from("jugadores")
+    const { data: personaje } = await supabase
+      .from("personajes")
       .select("*")
-      .eq("user_id", userId)
+      .eq("user_id", interaction.user.id)
       .single();
 
-    if (!data) {
-      return interaction.reply({
-        content: "❌ No tienes personaje. Usa /elegirmagia primero.",
-        ephemeral: true
-      });
+    if (!personaje) {
+      return interaction.reply("❌ No tienes personaje.");
     }
 
-    return interaction.reply(`
-📜 **Perfil de ${interaction.user.username}**
+    const vidaActual = calcularVidaActual(personaje);
 
-🔮 Magia: ${data.magia}
-⭐ Nivel: ${data.nivel}
-✨ XP: ${data.xp}
-💰 Oro: ${data.oro}
-❤️ Vida: ${data.vida}/${data.vida_max}
-    `);
+    interaction.reply(
+      `🧙 **Tu Personaje**
+Magia: ${personaje.magia}
+Nivel: ${personaje.nivel}
+XP: ${personaje.xp}
+Oro: ${personaje.oro}
+Vida: ${vidaActual}/${personaje.vida_max}`
+    );
   }
 
-  /* ========= BETA TESTER ========= */
+  if (interaction.commandName === "batalla") {
 
-  if (interaction.commandName === "betatester") {
-    const { data } = await supabase
-      .from("jugadores")
+    const { data: personaje } = await supabase
+      .from("personajes")
       .select("*")
-      .eq("user_id", userId)
+      .eq("user_id", interaction.user.id)
       .single();
 
-    if (!data) {
-      return interaction.reply({
-        content: "❌ Primero crea personaje con /elegirmagia",
-        ephemeral: true
-      });
+    if (!personaje) {
+      return interaction.reply("❌ No tienes personaje. Usa /elegirmagia primero.");
     }
+
+    let vidaJugador = calcularVidaActual(personaje);
+    let ataqueJugador = 20 + personaje.nivel * 5;
+
+    let enemigoVida = 50 + personaje.nivel * 20;
+    let enemigoAtaque = 10 + personaje.nivel * 3;
+
+    let log = `⚔️ **BATALLA INICIADA**\n\n`;
+
+    while (vidaJugador > 0 && enemigoVida > 0) {
+
+      enemigoVida -= ataqueJugador;
+      log += `🧙 Tú golpeas y haces ${ataqueJugador} daño\n`;
+
+      if (enemigoVida <= 0) break;
+
+      vidaJugador -= enemigoAtaque;
+      log += `👹 Enemigo golpea y hace ${enemigoAtaque} daño\n\n`;
+    }
+
+    if (vidaJugador <= 0) {
+      await supabase
+        .from("personajes")
+        .update({
+          vida: 0,
+          last_battle: Date.now()
+        })
+        .eq("user_id", interaction.user.id);
+
+      return interaction.reply(log + "\n💀 Has perdido la batalla.");
+    }
+
+    const oroGanado = Math.floor(Math.random() * 200) + 100;
+    const nuevaXp = personaje.xp + 100;
 
     await supabase
-      .from("jugadores")
+      .from("personajes")
       .update({
-        xp: data.xp + 3000,
-        oro: data.oro + 5000
+        xp: nuevaXp,
+        oro: personaje.oro + oroGanado,
+        vida: vidaJugador,
+        last_battle: Date.now()
       })
-      .eq("user_id", userId);
+      .eq("user_id", interaction.user.id);
 
-    return interaction.reply("🎁 Recompensa Beta Tester recibida!");
-  }
-
-  /* ========= AYUDA ========= */
-
-  if (interaction.commandName === "ayuda") {
-    return interaction.reply(`
-📘 **Comandos disponibles**
-
-/elegirmagia → Crear personaje
-/info → Ver perfil
-/betatester → Recompensa especial
-/ayuda → Ver comandos
-    `);
+    interaction.reply(
+      log +
+      `\n🏆 Has ganado!\n✨ +100 XP\n💰 +${oroGanado} oro`
+    );
   }
 });
-
-/* ==========================
-   LOGIN
-========================== */
 
 client.login(process.env.TOKEN);
