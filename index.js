@@ -1,10 +1,27 @@
 require("dotenv").config();
+
+const express = require("express");
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
 const { createClient } = require("@supabase/supabase-js");
 
-// ===============================
-// CONFIG
-// ===============================
+// =======================
+// EXPRESS (ANTI PORT ERROR)
+// =======================
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get("/", (req, res) => {
+  res.send("MMO Bot activo 🚀");
+});
+
+app.listen(PORT, () => {
+  console.log("Servidor web activo en puerto " + PORT);
+});
+
+// =======================
+// DISCORD + SUPABASE
+// =======================
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
@@ -17,21 +34,12 @@ const supabase = createClient(
 
 const CLIENT_ID = process.env.CLIENT_ID;
 
-// ===============================
-// FUNCIONES BASE
-// ===============================
+// =======================
+// FUNCIONES MMO
+// =======================
 
 function dañoBase() {
-  return 15; // TODOS IGUALES
-}
-
-function rarezaProb() {
-  const r = Math.random();
-  if (r < 0.50) return "Comun";
-  if (r < 0.75) return "Raro";
-  if (r < 0.90) return "Epico";
-  if (r < 0.98) return "Legendario";
-  return "UR";
+  return 15;
 }
 
 function enemigoIA(nivel) {
@@ -42,21 +50,9 @@ function enemigoIA(nivel) {
   };
 }
 
-function subirNivel(data) {
-  const xpNecesaria = data.nivel * 200;
-  if (data.xp >= xpNecesaria) {
-    return {
-      nivel: data.nivel + 1,
-      xp: 0,
-      vida: data.vida + 20
-    };
-  }
-  return null;
-}
-
-// ===============================
+// =======================
 // COMANDOS
-// ===============================
+// =======================
 
 const commands = [
 
@@ -105,48 +101,38 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
-    .setName("duelo")
-    .setDescription("Retar jugador")
-    .addUserOption(o =>
-      o.setName("usuario")
-        .setDescription("Jugador")
-        .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
     .setName("ranking")
     .setDescription("Top ranking")
 
 ].map(c => c.toJSON());
 
-// ===============================
+// =======================
 // READY
-// ===============================
+// =======================
 
 client.once("ready", async () => {
-  console.log(`Bot activo como ${client.user.tag}`);
+  console.log("Bot activo como " + client.user.tag);
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+
   await rest.put(
     Routes.applicationCommands(CLIENT_ID),
     { body: commands }
   );
 
-  console.log("Comandos registrados");
+  console.log("Comandos registrados correctamente");
 });
 
-// ===============================
+// =======================
 // INTERACCIONES
-// ===============================
+// =======================
 
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const userId = interaction.user.id;
 
-  // =========================
-  // CREAR
-  // =========================
+  // ===== CREAR =====
   if (interaction.commandName === "crear") {
 
     const clase = interaction.options.getString("clase");
@@ -172,12 +158,10 @@ client.on("interactionCreate", async interaction => {
       mana: 50
     });
 
-    return interaction.reply(`Personaje creado como ${clase}.`);
+    return interaction.reply("Personaje creado como " + clase);
   }
 
-  // =========================
-  // PERFIL
-  // =========================
+  // ===== PERFIL =====
   if (interaction.commandName === "perfil") {
 
     const { data } = await supabase
@@ -190,7 +174,6 @@ client.on("interactionCreate", async interaction => {
 
     return interaction.reply(
 `📜 PERFIL
-
 Clase: ${data.clase}
 Nivel: ${data.nivel}
 XP: ${data.xp}
@@ -200,9 +183,7 @@ Banco: ${data.banco}`
     );
   }
 
-  // =========================
-  // COMBATIR
-  // =========================
+  // ===== COMBATIR =====
   if (interaction.commandName === "combatir") {
 
     const { data } = await supabase
@@ -234,11 +215,9 @@ Banco: ${data.banco}`
     const xpGanada = 100;
     const oroGanado = 50;
 
-    let nuevaXp = data.xp + xpGanada;
-
     await supabase.from("players")
       .update({
-        xp: nuevaXp,
+        xp: data.xp + xpGanada,
         oro: data.oro + oroGanado
       })
       .eq("id", userId);
@@ -250,9 +229,7 @@ Banco: ${data.banco}`
     );
   }
 
-  // =========================
-  // BALANCE
-  // =========================
+  // ===== BALANCE =====
   if (interaction.commandName === "balance") {
 
     const { data } = await supabase
@@ -261,15 +238,15 @@ Banco: ${data.banco}`
       .eq("id", userId)
       .single();
 
+    if (!data) return interaction.reply("No tienes personaje.");
+
     return interaction.reply(
 `💰 Oro: ${data.oro}
 🏦 Banco: ${data.banco}`
     );
   }
 
-  // =========================
-  // DEPOSITAR
-  // =========================
+  // ===== DEPOSITAR =====
   if (interaction.commandName === "depositar") {
 
     const cantidad = interaction.options.getInteger("cantidad");
@@ -282,7 +259,7 @@ Banco: ${data.banco}`
       .eq("id", userId)
       .single();
 
-    if (data.oro < cantidad)
+    if (!data || data.oro < cantidad)
       return interaction.reply("No tienes suficiente oro.");
 
     await supabase.from("players")
@@ -295,9 +272,7 @@ Banco: ${data.banco}`
     return interaction.reply("Depositado correctamente.");
   }
 
-  // =========================
-  // RETIRAR
-  // =========================
+  // ===== RETIRAR =====
   if (interaction.commandName === "retirar") {
 
     const cantidad = interaction.options.getInteger("cantidad");
@@ -310,7 +285,7 @@ Banco: ${data.banco}`
       .eq("id", userId)
       .single();
 
-    if (data.banco < cantidad)
+    if (!data || data.banco < cantidad)
       return interaction.reply("No tienes suficiente en banco.");
 
     await supabase.from("players")
@@ -323,22 +298,7 @@ Banco: ${data.banco}`
     return interaction.reply("Retirado correctamente.");
   }
 
-  // =========================
-  // DUELO
-  // =========================
-  if (interaction.commandName === "duelo") {
-
-    const usuario = interaction.options.getUser("usuario");
-    if (!usuario) return interaction.reply("Usuario inválido.");
-
-    return interaction.reply(
-`Duelo enviado a ${usuario.username}. (Modo simple activado)`
-    );
-  }
-
-  // =========================
-  // RANKING
-  // =========================
+  // ===== RANKING =====
   if (interaction.commandName === "ranking") {
 
     const { data } = await supabase
@@ -349,14 +309,16 @@ Banco: ${data.banco}`
 
     let texto = "🏆 TOP 5\n";
 
-    data.forEach((p, i) => {
-      texto += `${i + 1}. ${p.id} - Nivel ${p.nivel}\n`;
-    });
+    if (data) {
+      data.forEach((p, i) => {
+        texto += `${i + 1}. ${p.id} - Nivel ${p.nivel}\n`;
+      });
+    }
 
     return interaction.reply(texto);
   }
 
 });
 
-// ===============================
+// =======================
 client.login(process.env.TOKEN);
