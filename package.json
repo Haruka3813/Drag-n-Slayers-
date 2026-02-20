@@ -1,15 +1,27 @@
 {
   "name": "fairy-slayers",
   "version": "1.0.0",
-  "description": "Bot RPG Fairy Slayers",
+  "description": "Bot RPG Fairy Slayers estilo Nekotina",
   "main": "index.js",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },
+  "keywords": [
+    "discord",
+    "bot",
+    "rpg",
+    "fairy",
+    "slayers"
+  ],
+  "author": "TuNombre",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
-    "discord.js": "^14.14.1",
-    "@supabase/supabase-js": "^2.39.3",
+    "discord.js": "^14.12.1",
+    "@supabase/supabase-js": "^2.39.0",
     "dotenv": "^16.3.1",
     "express": "^4.18.2"
   }
