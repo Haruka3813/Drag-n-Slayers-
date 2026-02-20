@@ -16,237 +16,263 @@ app.listen(10000);
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const CLIENT_ID = process.env.CLIENT_ID;
 
-//////////////////////////////////////////////////
-// 🎒 BASE DE DATOS DE OBJETOS CON ID
-//////////////////////////////////////////////////
+////////////////////////////////////////////////////
+// 🎯 RAREZA → MULTIPLICADOR DE DAÑO
+////////////////////////////////////////////////////
+
+const rarezaPower = {
+  "Común": 1,
+  "Raro": 1.2,
+  "Beryraro": 1.5,
+  "Épico": 2,
+  "Ultra Épico": 3,
+  "Legendario": 4,
+  "UR": 6
+};
+
+////////////////////////////////////////////////////
+// ⚔ ARMAS
+////////////////////////////////////////////////////
 
 const ARMAS = [
-  { id: "A1", nombre: "Espada de Fuego", raridad: "Común", nivel: 1 },
-  { id: "A2", nombre: "Lanza Celestial", raridad: "Raro", nivel: 10 },
-  { id: "A3", nombre: "Martillo UR", raridad: "UR", nivel: 100 }
+{ id:"A1", nombre:"Espada Novato", raridad:"Común", nivel:1 },
+{ id:"A2", nombre:"Hacha Hierro", raridad:"Raro", nivel:5 },
+{ id:"A3", nombre:"Katana Carmesí", raridad:"Épico", nivel:20 },
+{ id:"A4", nombre:"Lanza Dragón", raridad:"Legendario", nivel:40 },
+{ id:"A5", nombre:"Hoja Suprema", raridad:"UR", nivel:80 }
 ];
 
-const ARMADURAS = [
-  { id: "AR1", nombre: "Armadura Ligera", raridad: "Común", nivel: 1 },
-  { id: "AR2", nombre: "Armadura Mística", raridad: "Épico", nivel: 20 },
-  { id: "AR3", nombre: "Armadura Dragón UR", raridad: "UR", nivel: 100 }
-];
+////////////////////////////////////////////////////
+// 🐾 MASCOTAS
+////////////////////////////////////////////////////
 
 const MASCOTAS = [
-  { id: "M1", nombre: "Gatito", raridad: "Común" },
-  { id: "M2", nombre: "Dragón Bebé", raridad: "Legendario" },
-  { id: "M3", nombre: "Fénix UR", raridad: "UR" }
+{ id:"M1", nombre:"Gatito", raridad:"Común", buff:1.1 },
+{ id:"M2", nombre:"Lobo Gris", raridad:"Raro", buff:1.2 },
+{ id:"M3", nombre:"Fénix", raridad:"Legendario", buff:1.5 },
+{ id:"M4", nombre:"Dragón Antiguo", raridad:"UR", buff:2 }
 ];
 
-const ITEMS = [
-  { id: "I1", nombre: "Poción Vida", tipo: "consumible" },
-  { id: "I2", nombre: "Mineral Hierro", tipo: "material" },
-  { id: "I3", nombre: "Pez Dorado", tipo: "material" }
+////////////////////////////////////////////////////
+// 🎣 PECES
+////////////////////////////////////////////////////
+
+const PECES = [
+{ id:"P1", nombre:"Pez Común", raridad:"Común" },
+{ id:"P2", nombre:"Pez Dorado", raridad:"Beryraro" },
+{ id:"P3", nombre:"Kraken Juvenil", raridad:"UR" }
 ];
 
-//////////////////////////////////////////////////
+////////////////////////////////////////////////////
+// ⛏ MINERALES
+////////////////////////////////////////////////////
+
+const MINERALES = [
+{ id:"MIN1", nombre:"Hierro", raridad:"Común" },
+{ id:"MIN2", nombre:"Oro", raridad:"Beryraro" },
+{ id:"MIN3", nombre:"Núcleo Dracónico", raridad:"UR" }
+];
+
+////////////////////////////////////////////////////
 // SLASH COMMANDS
-//////////////////////////////////////////////////
+////////////////////////////////////////////////////
 
 const commands = [
   new SlashCommandBuilder().setName("elegirmagia")
-    .setDescription("Elige tu magia")
-    .addStringOption(opt =>
-      opt.setName("tipo")
-        .setDescription("Tipo de magia")
-        .setRequired(true)
-        .addChoices(
-          { name: "Dragón Slayer", value: "dragon" },
-          { name: "Celestial", value: "celestial" },
-          { name: "Oscuro", value: "oscuro" }
-        )
+    .setDescription("Elige magia")
+    .addStringOption(o =>
+      o.setName("tipo")
+       .setDescription("Magia")
+       .setRequired(true)
+       .addChoices(
+         { name: "Dragón Slayer", value: "dragon" },
+         { name: "Celestial", value: "celestial" },
+         { name: "Oscuro", value: "oscuro" }
+       )
     ),
-
-  new SlashCommandBuilder().setName("info").setDescription("Ver perfil"),
-  new SlashCommandBuilder().setName("bag").setDescription("Ver mochila"),
-  new SlashCommandBuilder().setName("balance").setDescription("Ver oro"),
-  new SlashCommandBuilder().setName("tienda").setDescription("Ver tienda"),
-  new SlashCommandBuilder().setName("mascotas").setDescription("Ver mascotas"),
+  new SlashCommandBuilder().setName("info").setDescription("Perfil"),
+  new SlashCommandBuilder().setName("batalla").setDescription("Pelear"),
   new SlashCommandBuilder().setName("minar").setDescription("Minar"),
   new SlashCommandBuilder().setName("pescar").setDescription("Pescar"),
-  new SlashCommandBuilder().setName("aventura").setDescription("Modo aventura")
+  new SlashCommandBuilder().setName("aventura").setDescription("Aventura automática"),
+  new SlashCommandBuilder().setName("bag").setDescription("Ver mochila"),
+  new SlashCommandBuilder().setName("balance").setDescription("Ver oro")
 ].map(c => c.toJSON());
-
-//////////////////////////////////////////////////
 
 client.once("ready", async () => {
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
   await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-  console.log("✅ Bot listo");
+  console.log("✅ Fairy Slayers listo");
 });
 
-//////////////////////////////////////////////////
+////////////////////////////////////////////////////
 // FUNCIONES
-//////////////////////////////////////////////////
+////////////////////////////////////////////////////
 
-async function getUser(id) {
+async function getUser(id){
   const { data } = await supabase.from("personajes").select("*").eq("id", id).single();
   return data;
 }
 
-async function updateUser(id, data) {
+async function updateUser(id,data){
   await supabase.from("personajes").update(data).eq("id", id);
 }
 
-function random(array) {
-  return array[Math.floor(Math.random() * array.length)];
+function random(arr){
+  return arr[Math.floor(Math.random()*arr.length)];
 }
 
-//////////////////////////////////////////////////
+////////////////////////////////////////////////////
 // INTERACCIONES
-//////////////////////////////////////////////////
+////////////////////////////////////////////////////
 
-client.on("interactionCreate", async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+client.on("interactionCreate", async interaction=>{
+if(!interaction.isChatInputCommand()) return;
 
-  const userId = interaction.user.id;
-  const cmd = interaction.commandName;
-  let user = await getUser(userId);
+const userId = interaction.user.id;
+const cmd = interaction.commandName;
+let user = await getUser(userId);
 
-  //////////////////////////////////////////////
-  // CREAR PERSONAJE
-  //////////////////////////////////////////////
+////////////////////////////////////////////////////
+// CREAR PERSONAJE
+////////////////////////////////////////////////////
 
-  if (cmd === "elegirmagia") {
-    if (user) return interaction.reply("Ya tienes personaje.");
+if(cmd==="elegirmagia"){
+  if(user) return interaction.reply("Ya tienes personaje.");
+  const magia = interaction.options.getString("tipo");
 
-    const magia = interaction.options.getString("tipo");
+  await supabase.from("personajes").insert({
+    id:userId,
+    magia,
+    nivel:1,
+    xp:0,
+    oro:0,
+    vida:500,
+    maxvida:500,
+    items:[],
+    mascotas:[]
+  });
 
-    await supabase.from("personajes").insert({
-      id: userId,
-      magia,
-      nivel: 1,
-      xp: 0,
-      oro: 0,
-      oro_banco: 0,
-      vida: 500,
-      maxvida: 500,
-      items: [],
-      mascotas: [],
-      arma_equipada: null,
-      armadura_equipada: null
-    });
+  return interaction.reply("✨ Personaje creado.");
+}
 
-    return interaction.reply("✨ Personaje creado.");
-  }
+if(!user) return interaction.reply("No tienes personaje.");
 
-  if (!user) return interaction.reply("No tienes personaje.");
+////////////////////////////////////////////////////
+// INFO
+////////////////////////////////////////////////////
 
-  //////////////////////////////////////////////
-  // INFO
-  //////////////////////////////////////////////
-
-  if (cmd === "info") {
-    return interaction.reply(
-`📜 Perfil
-Magia: ${user.magia}
-Nivel: ${user.nivel}
+if(cmd==="info"){
+  return interaction.reply(
+`Nivel: ${user.nivel}
 XP: ${user.xp}
-Oro: ${user.oro}`
-    );
+Oro: ${user.oro}
+Vida: ${user.vida}/${user.maxvida}`
+);
+}
+
+////////////////////////////////////////////////////
+// BATALLA
+////////////////////////////////////////////////////
+
+if(cmd==="batalla"){
+  let dañoBase = 50 + user.nivel*5;
+
+  let arma = ARMAS.find(a=>a.id===user.arma_equipada);
+  if(arma) dañoBase *= rarezaPower[arma.raridad];
+
+  let daño = Math.floor(dañoBase);
+
+  let xpGanada = 100;
+  let oroGanado = 80;
+
+  let nuevaXP = user.xp + xpGanada;
+  let nuevoNivel = user.nivel;
+
+  if(nuevaXP >= user.nivel*200){
+    nuevaXP = 0;
+    nuevoNivel++;
   }
 
-  //////////////////////////////////////////////
-  // BAG
-  //////////////////////////////////////////////
+  await updateUser(userId,{
+    xp:nuevaXP,
+    nivel:nuevoNivel,
+    oro:user.oro + oroGanado
+  });
 
-  if (cmd === "bag") {
-    if (!user.items.length) return interaction.reply("Mochila vacía.");
+  return interaction.reply(`⚔️ Victoria!
+Daño: ${daño}
++${xpGanada} XP
++${oroGanado} Oro`);
+}
 
-    const lista = user.items.map(i => `${i.nombre} (ID:${i.id}) x${i.cantidad}`).join("\n");
-    return interaction.reply(`🎒 Mochila:\n${lista}`);
-  }
+////////////////////////////////////////////////////
+// MINAR
+////////////////////////////////////////////////////
 
-  //////////////////////////////////////////////
-  // BALANCE
-  //////////////////////////////////////////////
+if(cmd==="minar"){
+  const mineral = random(MINERALES);
+  const items = user.items || [];
+  items.push(mineral);
 
-  if (cmd === "balance") {
-    return interaction.reply(`💰 Oro: ${user.oro}`);
-  }
+  await updateUser(userId,{items});
 
-  //////////////////////////////////////////////
-  // TIENDA
-  //////////////////////////////////////////////
+  return interaction.reply(`⛏ Minaste: ${mineral.nombre} (${mineral.raridad})`);
+}
 
-  if (cmd === "tienda") {
-    const lista = [...ARMAS, ...ARMADURAS, ...MASCOTAS, ...ITEMS]
-      .map(i => `${i.nombre} | ID:${i.id} | ${i.raridad || i.tipo}`)
-      .join("\n");
+////////////////////////////////////////////////////
+// PESCAR
+////////////////////////////////////////////////////
 
-    return interaction.reply(`🏪 Tienda:\n${lista}`);
-  }
+if(cmd==="pescar"){
+  const pez = random(PECES);
+  const items = user.items || [];
+  items.push(pez);
 
-  //////////////////////////////////////////////
-  // MASCOTAS
-  //////////////////////////////////////////////
+  await updateUser(userId,{items});
 
-  if (cmd === "mascotas") {
-    if (!user.mascotas.length) return interaction.reply("No tienes mascotas.");
+  return interaction.reply(`🎣 Pescaste: ${pez.nombre} (${pez.raridad})`);
+}
 
-    const lista = user.mascotas.map(m => `${m.nombre} (ID:${m.id})`).join("\n");
-    return interaction.reply(`🐾 Mascotas:\n${lista}`);
-  }
+////////////////////////////////////////////////////
+// AVENTURA
+////////////////////////////////////////////////////
 
-  //////////////////////////////////////////////
-  // MINAR
-  //////////////////////////////////////////////
+if(cmd==="aventura"){
+  const arma = random(ARMAS);
+  const items = user.items || [];
+  items.push(arma);
 
-  if (cmd === "minar") {
-    const mineral = random(ITEMS);
-    const mochila = user.items || [];
-    mochila.push({ id: mineral.id, nombre: mineral.nombre, cantidad: 1 });
+  await updateUser(userId,{
+    xp:user.xp + 150,
+    oro:user.oro + 120,
+    items
+  });
 
-    await updateUser(userId, {
-      oro: user.oro + 50,
-      items: mochila
-    });
+  return interaction.reply(`🏰 Aventura completada!
+Loot: ${arma.nombre} (${arma.raridad})
++150 XP
++120 Oro`);
+}
 
-    return interaction.reply(`⛏️ Minaste y obtuviste ${mineral.nombre} (ID:${mineral.id})`);
-  }
+////////////////////////////////////////////////////
+// BAG
+////////////////////////////////////////////////////
 
-  //////////////////////////////////////////////
-  // PESCAR
-  //////////////////////////////////////////////
+if(cmd==="bag"){
+  if(!user.items.length) return interaction.reply("Mochila vacía.");
 
-  if (cmd === "pescar") {
-    const pez = random(ITEMS);
-    const mochila = user.items || [];
-    mochila.push({ id: pez.id, nombre: pez.nombre, cantidad: 1 });
+  const lista = user.items.map(i=>`${i.nombre} (${i.raridad})`).join("\n");
+  return interaction.reply(`🎒 Mochila:\n${lista}`);
+}
 
-    await updateUser(userId, {
-      oro: user.oro + 50,
-      items: mochila
-    });
+////////////////////////////////////////////////////
+// BALANCE
+////////////////////////////////////////////////////
 
-    return interaction.reply(`🎣 Pescaste ${pez.nombre} (ID:${pez.id})`);
-  }
-
-  //////////////////////////////////////////////
-  // AVENTURA
-  //////////////////////////////////////////////
-
-  if (cmd === "aventura") {
-    const armaDrop = random(ARMAS);
-    const mochila = user.items || [];
-    mochila.push({ id: armaDrop.id, nombre: armaDrop.nombre, cantidad: 1 });
-
-    await updateUser(userId, {
-      xp: user.xp + 100,
-      oro: user.oro + 100,
-      items: mochila
-    });
-
-    return interaction.reply(`🏰 Aventura completada.
-+100 XP
-+100 Oro
-Loot: ${armaDrop.nombre} (ID:${armaDrop.id})`);
-  }
+if(cmd==="balance"){
+  return interaction.reply(`💰 Oro: ${user.oro}`);
+}
 
 });
 
