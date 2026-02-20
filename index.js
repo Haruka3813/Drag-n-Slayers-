@@ -26,11 +26,11 @@ app.get("/", (req, res) => res.send("Fairy Slayers activo"));
 app.listen(10000, () => console.log("Servidor web activo en puerto 10000"));
 
 // =========================
-// Supabase (Service Role Key)
+// Supabase (Anon/Public Key)
 // =========================
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_KEY  // aquí tu anon/public key
 );
 
 // =========================
