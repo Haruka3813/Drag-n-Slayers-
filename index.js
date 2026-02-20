@@ -2,17 +2,32 @@ const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require
 const express = require("express");
 require("dotenv").config();
 
+// ===== SERVIDOR WEB (para Render) =====
 const app = express();
-app.get("/", (req, res) => res.send("Fairy Slayers activo 🧙‍♂️"));
-app.listen(process.env.PORT || 3000);
+app.get("/", (req, res) => {
+  res.send("Fairy Slayers activo 🧙‍♂️");
+});
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Servidor web activo");
+});
 
+// ===== VERIFICAR TOKEN =====
+if (!process.env.TOKEN) {
+  console.error("❌ TOKEN no encontrado en Environment Variables");
+  process.exit(1);
+}
+
+console.log("🔑 Token detectado");
+
+// ===== CLIENTE DISCORD =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
+// ===== SISTEMA DE JUGADORES (FASE 1) =====
 const jugadores = new Map();
 
-// 🔹 COMANDOS
+// ===== COMANDOS =====
 const commands = [
   new SlashCommandBuilder()
     .setName("elegirmagia")
@@ -33,7 +48,7 @@ const commands = [
     .setDescription("Ver información")
     .addStringOption(option =>
       option.setName("tipo")
-        .setDescription("personaje")
+        .setDescription("Tipo")
         .setRequired(true)
         .addChoices(
           { name: "personaje", value: "personaje" }
@@ -42,9 +57,10 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("ayuda")
-    .setDescription("Ver comandos disponibles")
+    .setDescription("Mostrar comandos")
 ];
 
+// ===== REGISTRAR COMANDOS =====
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 (async () => {
@@ -53,17 +69,24 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
       Routes.applicationCommands(process.env.CLIENT_ID),
       { body: commands }
     );
-    console.log("✅ Comandos registrados");
+    console.log("✅ Comandos slash registrados");
   } catch (error) {
-    console.error(error);
+    console.error("Error registrando comandos:", error);
   }
 })();
 
+// ===== EVENTO READY =====
+client.once("ready", () => {
+  console.log(`✅ Conectado como ${client.user.tag}`);
+});
+
+// ===== INTERACCIONES =====
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const userId = interaction.user.id;
 
+  // CREAR PERSONAJE
   if (interaction.commandName === "elegirmagia") {
     if (jugadores.has(userId)) {
       return interaction.reply("⚠️ Ya tienes un personaje creado.");
@@ -83,9 +106,13 @@ client.on("interactionCreate", async interaction => {
     return interaction.reply(`✨ Personaje creado con magia **${tipo}** y 500 de vida.`);
   }
 
+  // INFO PERSONAJE
   if (interaction.commandName === "info") {
     const jugador = jugadores.get(userId);
-    if (!jugador) return interaction.reply("❌ No tienes personaje. Usa /elegirmagia");
+
+    if (!jugador) {
+      return interaction.reply("❌ No tienes personaje. Usa /elegirmagia");
+    }
 
     return interaction.reply(`
 📜 **Tu Personaje**
@@ -97,9 +124,10 @@ Vida: ${jugador.vida}/${jugador.vidaMax}
     `);
   }
 
+  // AYUDA
   if (interaction.commandName === "ayuda") {
     return interaction.reply(`
-📖 **Fairy Slayers - Comandos**
+📖 **Fairy Slayers**
 /elegirmagia
 /info personaje
 /ayuda
@@ -107,4 +135,5 @@ Vida: ${jugador.vida}/${jugador.vidaMax}
   }
 });
 
+// ===== LOGIN =====
 client.login(process.env.TOKEN);
