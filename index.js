@@ -16,18 +16,25 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
 const XP_POR_NIVEL = 100;
-const INTERES_BANCO = 0.05;
 
-/* =============================
+/* ===============================
+   IA PROGRESIVA
+================================ */
+
+function escalarEnemigo(nivelJugador) {
+    return {
+        vida: 80 + nivelJugador * 20,
+        daño: 10 + nivelJugador * 5,
+        recompensa: 50 + nivelJugador * 25
+    };
+}
+
+/* ===============================
    FUNCIONES BASE
-============================= */
+================================ */
 
 async function obtenerJugador(userId) {
-    let { data } = await supabase
-        .from('players')
-        .select('*')
-        .eq('id', userId)
-        .single();
+    let { data } = await supabase.from('players').select('*').eq('id', userId).single();
 
     if (!data) {
         const nuevo = {
@@ -37,7 +44,9 @@ async function obtenerJugador(userId) {
             oro: 100,
             banco: 0,
             arma_equipped: null,
-            mascota_activa: null
+            mascota_activa: null,
+            rango: "Novato",
+            vida: 100
         };
 
         await supabase.from('players').insert(nuevo);
@@ -48,205 +57,177 @@ async function obtenerJugador(userId) {
 }
 
 async function agregarXP(userId, cantidad) {
-    let jugador = await obtenerJugador(userId);
-    let nuevoXP = jugador.xp + cantidad;
-    let nuevoNivel = jugador.nivel;
+    let j = await obtenerJugador(userId);
+    let xp = j.xp + cantidad;
+    let nivel = j.nivel;
 
-    while (nuevoXP >= XP_POR_NIVEL) {
-        nuevoXP -= XP_POR_NIVEL;
-        nuevoNivel++;
+    while (xp >= XP_POR_NIVEL) {
+        xp -= XP_POR_NIVEL;
+        nivel++;
     }
 
-    await supabase
-        .from('players')
-        .update({ xp: nuevoXP, nivel: nuevoNivel })
+    await supabase.from('players')
+        .update({ xp, nivel })
         .eq('id', userId);
-
-    return { nivel: nuevoNivel, xp: nuevoXP };
 }
 
-function colorRareza(r) {
-    if (r === "legendario") return 0xffd700;
-    if (r === "epico") return 0x9b59b6;
-    if (r === "raro") return 0x3498db;
-    return 0xffffff;
-}
-
-/* =============================
-   SLASH COMMANDS
-============================= */
+/* ===============================
+   COMANDOS
+================================ */
 
 const commands = [
-    new SlashCommandBuilder().setName('perfil').setDescription('Ver tu perfil'),
-    new SlashCommandBuilder().setName('balance').setDescription('Ver tu oro'),
-    new SlashCommandBuilder().setName('trabajar').setDescription('Ganar oro y XP'),
-    new SlashCommandBuilder().setName('loot').setDescription('Buscar objeto'),
-    new SlashCommandBuilder().setName('bag').setDescription('Ver inventario'),
+
+    new SlashCommandBuilder().setName('perfil').setDescription('Ver perfil'),
+
+    new SlashCommandBuilder().setName('combatir').setDescription('Pelear PvE'),
+
     new SlashCommandBuilder()
-        .setName('equipar')
-        .setDescription('Equipar arma')
-        .addStringOption(o => o.setName('id').setDescription('ID del item').setRequired(true)),
+        .setName('pvp')
+        .setDescription('Pelear contra jugador')
+        .addUserOption(o => o.setName('rival').setRequired(true)),
+
     new SlashCommandBuilder()
-        .setName('usar')
-        .setDescription('Usar item')
-        .addStringOption(o => o.setName('id').setDescription('ID del item').setRequired(true)),
+        .setName('mazmorra')
+        .setDescription('Entrar a mazmorra cooperativa'),
+
     new SlashCommandBuilder()
-        .setName('depositar')
-        .setDescription('Depositar oro al banco')
-        .addIntegerOption(o => o.setName('cantidad').setRequired(true)),
+        .setName('vender')
+        .setDescription('Vender item en mercado')
+        .addStringOption(o => o.setName('item_id').setRequired(true))
+        .addIntegerOption(o => o.setName('precio').setRequired(true)),
+
     new SlashCommandBuilder()
-        .setName('retirar')
-        .setDescription('Retirar oro del banco')
-        .addIntegerOption(o => o.setName('cantidad').setRequired(true)),
+        .setName('comprar')
+        .setDescription('Comprar del mercado')
+        .addStringOption(o => o.setName('id').setRequired(true)),
+
+    new SlashCommandBuilder().setName('ranking').setDescription('Top jugadores'),
+
+    new SlashCommandBuilder().setName('tienda').setDescription('Ver tienda global')
 ];
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 (async () => {
-    await rest.put(
-        Routes.applicationCommands(CLIENT_ID),
-        { body: commands }
-    );
+    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
 })();
 
-/* =============================
-   EVENTO PRINCIPAL
-============================= */
+/* ===============================
+   EVENTOS
+================================ */
 
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
 
+    if (!interaction.isChatInputCommand()) return;
     const userId = interaction.user.id;
 
     /* PERFIL */
     if (interaction.commandName === 'perfil') {
-        const jugador = await obtenerJugador(userId);
+        const j = await obtenerJugador(userId);
+        return interaction.reply(
+            `Nivel: ${j.nivel}\nOro: ${j.oro}\nVida: ${j.vida}`
+        );
+    }
 
-        await interaction.reply({
-            embeds: [{
-                title: `Perfil de ${interaction.user.username}`,
-                color: 0x00ff99,
-                fields: [
-                    { name: "Nivel", value: jugador.nivel.toString(), inline: true },
-                    { name: "XP", value: jugador.xp.toString(), inline: true },
-                    { name: "Oro", value: jugador.oro.toString(), inline: true },
-                    { name: "Banco", value: jugador.banco.toString(), inline: true }
-                ]
-            }]
+    /* PVE IA PROGRESIVA */
+    if (interaction.commandName === 'combatir') {
+        const j = await obtenerJugador(userId);
+        const enemigo = escalarEnemigo(j.nivel);
+
+        await supabase.rpc('sumar_oro', { uid: userId, cantidad: enemigo.recompensa });
+        await agregarXP(userId, 40);
+
+        return interaction.reply(
+            `Derrotaste enemigo escalado!\nGanaste ${enemigo.recompensa} oro`
+        );
+    }
+
+    /* PVP REAL */
+    if (interaction.commandName === 'pvp') {
+        const rival = interaction.options.getUser('rival');
+        const j1 = await obtenerJugador(userId);
+        const j2 = await obtenerJugador(rival.id);
+
+        const poder1 = j1.nivel * 10;
+        const poder2 = j2.nivel * 10;
+
+        const ganador = poder1 >= poder2 ? userId : rival.id;
+
+        await supabase.rpc('sumar_oro', { uid: ganador, cantidad: 100 });
+
+        return interaction.reply(
+            `Ganador: <@${ganador}>`
+        );
+    }
+
+    /* MAZMORRA COOP */
+    if (interaction.commandName === 'mazmorra') {
+        const j = await obtenerJugador(userId);
+
+        const vidaBoss = 300 + j.nivel * 30;
+        const recompensa = 500 + j.nivel * 50;
+
+        await supabase.rpc('sumar_oro', { uid: userId, cantidad: recompensa });
+        await agregarXP(userId, 100);
+
+        return interaction.reply(
+            `Mazmorra completada!\nGanaste ${recompensa} oro`
+        );
+    }
+
+    /* MERCADO */
+    if (interaction.commandName === 'vender') {
+        const itemId = interaction.options.getString('item_id');
+        const precio = interaction.options.getInteger('precio');
+
+        await supabase.from('mercado').insert({
+            vendedor: userId,
+            item_id: itemId,
+            precio
         });
+
+        return interaction.reply("Item puesto en mercado.");
     }
 
-    /* BALANCE */
-    if (interaction.commandName === 'balance') {
-        const jugador = await obtenerJugador(userId);
-        await interaction.reply(`💰 Oro: ${jugador.oro}`);
+    if (interaction.commandName === 'comprar') {
+        const id = interaction.options.getString('id');
+
+        const { data } = await supabase.from('mercado')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (!data) return interaction.reply("No existe.");
+
+        await supabase.rpc('sumar_oro', { uid: data.vendedor, cantidad: data.precio });
+
+        await supabase.from('mercado').delete().eq('id', id);
+
+        return interaction.reply("Compra realizada.");
     }
 
-    /* TRABAJAR */
-    if (interaction.commandName === 'trabajar') {
-        const oro = Math.floor(Math.random() * 50) + 20;
-        const xp = 20;
-
-        await supabase.rpc('sumar_oro', { uid: userId, cantidad: oro });
-        const nivel = await agregarXP(userId, xp);
-
-        await interaction.reply(`Trabajaste y ganaste ${oro} oro y ${xp} XP.`);
-    }
-
-    /* LOOT */
-    if (interaction.commandName === 'loot') {
-        const { data: items } = await supabase.from('items').select('*');
-        const random = items[Math.floor(Math.random() * items.length)];
-
-        await supabase.from('inventario').insert({
-            user_id: userId,
-            item_id: random.id
-        });
-
-        await interaction.reply({
-            embeds: [{
-                title: `Encontraste ${random.nombre}`,
-                description: random.efecto || "Sin efecto",
-                color: colorRareza(random.rareza)
-            }]
-        });
-    }
-
-    /* BAG */
-    if (interaction.commandName === 'bag') {
+    /* RANKING */
+    if (interaction.commandName === 'ranking') {
         const { data } = await supabase
-            .from('inventario')
-            .select('items(*)')
-            .eq('user_id', userId);
-
-        if (!data || data.length === 0)
-            return interaction.reply("Tu inventario está vacío.");
-
-        const lista = data.map(i => `• ${i.items.nombre}`).join("\n");
-
-        await interaction.reply({
-            embeds: [{
-                title: "🎒 Inventario",
-                description: lista
-            }]
-        });
-    }
-
-    /* EQUIPAR */
-    if (interaction.commandName === 'equipar') {
-        const id = interaction.options.getString('id');
-
-        await supabase
             .from('players')
-            .update({ arma_equipped: id })
-            .eq('id', userId);
+            .select('*')
+            .order('nivel', { ascending: false })
+            .limit(10);
 
-        await interaction.reply("Arma equipada correctamente.");
+        const top = data.map((p, i) => `${i + 1}. <@${p.id}> - Nivel ${p.nivel}`).join("\n");
+
+        return interaction.reply(top);
     }
 
-    /* USAR */
-    if (interaction.commandName === 'usar') {
-        const id = interaction.options.getString('id');
-        await interaction.reply("Item usado (sistema expandible).");
+    /* TIENDA GLOBAL */
+    if (interaction.commandName === 'tienda') {
+        const { data } = await supabase.from('items').select('*').limit(10);
+
+        const lista = data.map(i => `${i.nombre} - ${i.rareza}`).join("\n");
+
+        return interaction.reply(lista);
     }
 
-    /* DEPOSITAR */
-    if (interaction.commandName === 'depositar') {
-        const cantidad = interaction.options.getInteger('cantidad');
-        const jugador = await obtenerJugador(userId);
-
-        if (jugador.oro < cantidad)
-            return interaction.reply("No tienes suficiente oro.");
-
-        await supabase
-            .from('players')
-            .update({
-                oro: jugador.oro - cantidad,
-                banco: jugador.banco + cantidad
-            })
-            .eq('id', userId);
-
-        await interaction.reply(`Depositaste ${cantidad} oro.`);
-    }
-
-    /* RETIRAR */
-    if (interaction.commandName === 'retirar') {
-        const cantidad = interaction.options.getInteger('cantidad');
-        const jugador = await obtenerJugador(userId);
-
-        if (jugador.banco < cantidad)
-            return interaction.reply("No tienes suficiente en el banco.");
-
-        await supabase
-            .from('players')
-            .update({
-                oro: jugador.oro + cantidad,
-                banco: jugador.banco - cantidad
-            })
-            .eq('id', userId);
-
-        await interaction.reply(`Retiraste ${cantidad} oro.`);
-    }
 });
 
 client.login(TOKEN);
