@@ -1,6 +1,3 @@
-// ===========================
-// index.js MMO Discord Bot
-// ===========================
 import { Client, GatewayIntentBits } from 'discord.js';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
@@ -16,13 +13,13 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 // FUNCIONES GENERALES
 // ===========================
 
-// Obtener player
+// Obtener jugador
 async function getPlayer(id) {
     const { data } = await supabase.from('players').select('*').eq('id', id).single();
     return data;
 }
 
-// Crear player si no existe
+// Crear jugador si no existe
 async function createPlayer(id, clase='Novato') {
     const player = await getPlayer(id);
     if (!player) {
@@ -30,7 +27,7 @@ async function createPlayer(id, clase='Novato') {
     }
 }
 
-// Agregar oro
+// Incrementar oro
 async function addOro(uid, cantidad) {
     await supabase.rpc('increment_oro', { uid, cantidad });
 }
@@ -62,7 +59,7 @@ client.on('messageCreate', async message => {
         const { data: inventario } = await supabase.from('inventario').select('item_id, cantidad, items(*)').eq('player_id', message.author.id);
         if(!inventario || inventario.length === 0) return message.reply("📦 Tu inventario está vacío");
         let invText = "📦 Inventario:\n";
-        inventario.forEach(i => invText += `${i.items.nombre} x${i.cantidad}\n`);
+        inventario.forEach(i => invText += `${i.items.nombre} x${i.cantidad} (${i.items.rareza})\n`);
         message.reply(invText);
     }
 
@@ -75,7 +72,7 @@ client.on('messageCreate', async message => {
         const { data: itemData } = await supabase.from('items').select('*').ilike('nombre', itemName).single();
         if(!itemData) return message.reply("❌ Item no encontrado");
         message.reply(`✅ Has usado ${itemData.nombre} (${itemData.rareza})`);
-        // Aquí se puede agregar lógica de efectos según tipo (weapon/pet/fish/mineral)
+        // Aquí se puede agregar lógica de efectos según tipo
     }
 
     // -------------------
@@ -99,7 +96,7 @@ client.on('messageCreate', async message => {
         const { data: itemData } = await supabase.from('items').select('*').ilike('nombre', itemName).single();
         if(!itemData) return message.reply("❌ Item no encontrado");
         message.reply(`⚔️ Has equipado ${itemData.nombre}`);
-        // Aquí se puede agregar lógica de equipamiento y buffs de mascotas
+        // Aquí se puede agregar lógica de buffs de armas o mascotas
     }
 
     // -------------------
@@ -152,9 +149,18 @@ client.on('messageCreate', async message => {
         const { data: enemigos } = await supabase.from('enemigos').select('*');
         const enemy = enemigos[Math.floor(Math.random()*enemigos.length)];
         message.reply(`⚔️ Te has encontrado con ${enemy.nombre} (Vida: ${enemy.vida})`);
-        // Aquí se puede agregar lógica de ataque, vida, buffs y XP
+        // Aquí se puede agregar lógica de combate, XP y drops
     }
 
+    // -------------------
+    // /ranking
+    // -------------------
+    if(cmd === '/ranking') {
+        const { data: players } = await supabase.from('players').select('*').order('xp', { ascending:false }).limit(10);
+        let text = "🏆 Top 10 Jugadores:\n";
+        players.forEach((p,i) => text += `${i+1}. <@${p.id}> - Nivel ${p.nivel} XP:${p.xp} Oro:${p.oro}\n`);
+        message.reply(text);
+    }
 });
 
 // ===========================
