@@ -1,324 +1,163 @@
-require("dotenv").config();
+// ===========================
+// index.js MMO Discord Bot
+// ===========================
+import { Client, GatewayIntentBits } from 'discord.js';
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const express = require("express");
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
-const { createClient } = require("@supabase/supabase-js");
+// ===========================
+// CONFIG BOT & SUPABASE
+// ===========================
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates] });
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// =======================
-// EXPRESS (ANTI PORT ERROR)
-// =======================
+// ===========================
+// FUNCIONES GENERALES
+// ===========================
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get("/", (req, res) => {
-  res.send("MMO Bot activo 🚀");
-});
-
-app.listen(PORT, () => {
-  console.log("Servidor web activo en puerto " + PORT);
-});
-
-// =======================
-// DISCORD + SUPABASE
-// =======================
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
-
-const CLIENT_ID = process.env.CLIENT_ID;
-
-// =======================
-// FUNCIONES MMO
-// =======================
-
-function dañoBase() {
-  return 15;
+// Obtener player
+async function getPlayer(id) {
+    const { data } = await supabase.from('players').select('*').eq('id', id).single();
+    return data;
 }
 
-function enemigoIA(nivel) {
-  return {
-    nombre: "Enemigo Salvaje",
-    vida: 50 + nivel * 20,
-    daño: 10 + nivel * 3
-  };
+// Crear player si no existe
+async function createPlayer(id, clase='Novato') {
+    const player = await getPlayer(id);
+    if (!player) {
+        await supabase.from('players').insert({ id, clase, subclase: '', nivel:1, xp:0, oro:100, banco:0, vida:100, mana:50 });
+    }
 }
 
-// =======================
-// COMANDOS
-// =======================
+// Agregar oro
+async function addOro(uid, cantidad) {
+    await supabase.rpc('increment_oro', { uid, cantidad });
+}
 
-const commands = [
+// ===========================
+// COMANDOS MMO
+// ===========================
 
-  new SlashCommandBuilder()
-    .setName("crear")
-    .setDescription("Crear personaje")
-    .addStringOption(o =>
-      o.setName("clase")
-        .setDescription("Clase")
-        .setRequired(true)
-        .addChoices(
-          { name: "Guerrero", value: "Guerrero" },
-          { name: "Mago", value: "Mago" },
-          { name: "Arquero", value: "Arquero" }
-        )
-    ),
+client.on('messageCreate', async message => {
+    if (message.author.bot) return;
 
-  new SlashCommandBuilder()
-    .setName("perfil")
-    .setDescription("Ver perfil"),
+    const args = message.content.trim().split(/ +/g);
+    const cmd = args.shift().toLowerCase();
 
-  new SlashCommandBuilder()
-    .setName("combatir")
-    .setDescription("Combatir enemigo"),
-
-  new SlashCommandBuilder()
-    .setName("balance")
-    .setDescription("Ver oro y banco"),
-
-  new SlashCommandBuilder()
-    .setName("depositar")
-    .setDescription("Depositar al banco")
-    .addIntegerOption(o =>
-      o.setName("cantidad")
-        .setDescription("Cantidad")
-        .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("retirar")
-    .setDescription("Retirar del banco")
-    .addIntegerOption(o =>
-      o.setName("cantidad")
-        .setDescription("Cantidad")
-        .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("ranking")
-    .setDescription("Top ranking")
-
-].map(c => c.toJSON());
-
-// =======================
-// READY
-// =======================
-
-client.once("ready", async () => {
-  console.log("Bot activo como " + client.user.tag);
-
-  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-
-  await rest.put(
-    Routes.applicationCommands(CLIENT_ID),
-    { body: commands }
-  );
-
-  console.log("Comandos registrados correctamente");
-});
-
-// =======================
-// INTERACCIONES
-// =======================
-
-client.on("interactionCreate", async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-
-  const userId = interaction.user.id;
-
-  // ===== CREAR =====
-  if (interaction.commandName === "crear") {
-
-    const clase = interaction.options.getString("clase");
-
-    const { data: existe } = await supabase
-      .from("players")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
-    if (existe) {
-      return interaction.reply("Ya tienes personaje.");
+    // -------------------
+    // /balance
+    // -------------------
+    if(cmd === '/balance') {
+        await createPlayer(message.author.id);
+        const player = await getPlayer(message.author.id);
+        message.reply(`💰 Oro: ${player.oro} | 🏦 Banco: ${player.banco}`);
     }
 
-    await supabase.from("players").insert({
-      id: userId,
-      clase,
-      nivel: 1,
-      xp: 0,
-      oro: 100,
-      banco: 0,
-      vida: 100,
-      mana: 50
-    });
-
-    return interaction.reply("Personaje creado como " + clase);
-  }
-
-  // ===== PERFIL =====
-  if (interaction.commandName === "perfil") {
-
-    const { data } = await supabase
-      .from("players")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
-    if (!data) return interaction.reply("No tienes personaje.");
-
-    return interaction.reply(
-`📜 PERFIL
-Clase: ${data.clase}
-Nivel: ${data.nivel}
-XP: ${data.xp}
-Vida: ${data.vida}
-Oro: ${data.oro}
-Banco: ${data.banco}`
-    );
-  }
-
-  // ===== COMBATIR =====
-  if (interaction.commandName === "combatir") {
-
-    const { data } = await supabase
-      .from("players")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
-    if (!data) return interaction.reply("No tienes personaje.");
-
-    const enemigo = enemigoIA(data.nivel);
-
-    let vidaJugador = data.vida;
-    let vidaEnemigo = enemigo.vida;
-
-    while (vidaJugador > 0 && vidaEnemigo > 0) {
-      vidaEnemigo -= dañoBase();
-      vidaJugador -= enemigo.daño;
+    // -------------------
+    // /bag
+    // -------------------
+    if(cmd === '/bag') {
+        await createPlayer(message.author.id);
+        const { data: inventario } = await supabase.from('inventario').select('item_id, cantidad, items(*)').eq('player_id', message.author.id);
+        if(!inventario || inventario.length === 0) return message.reply("📦 Tu inventario está vacío");
+        let invText = "📦 Inventario:\n";
+        inventario.forEach(i => invText += `${i.items.nombre} x${i.cantidad}\n`);
+        message.reply(invText);
     }
 
-    if (vidaJugador <= 0) {
-      await supabase.from("players")
-        .update({ vida: 100 })
-        .eq("id", userId);
-
-      return interaction.reply("Perdiste la batalla.");
+    // -------------------
+    // /usar
+    // -------------------
+    if(cmd === '/usar') {
+        const itemName = args.join(' ');
+        if(!itemName) return message.reply("❌ Debes indicar el nombre del item a usar");
+        const { data: itemData } = await supabase.from('items').select('*').ilike('nombre', itemName).single();
+        if(!itemData) return message.reply("❌ Item no encontrado");
+        message.reply(`✅ Has usado ${itemData.nombre} (${itemData.rareza})`);
+        // Aquí se puede agregar lógica de efectos según tipo (weapon/pet/fish/mineral)
     }
 
-    const xpGanada = 100;
-    const oroGanado = 50;
-
-    await supabase.from("players")
-      .update({
-        xp: data.xp + xpGanada,
-        oro: data.oro + oroGanado
-      })
-      .eq("id", userId);
-
-    return interaction.reply(
-`Ganaste la batalla!
-+${xpGanada} XP
-+${oroGanado} oro`
-    );
-  }
-
-  // ===== BALANCE =====
-  if (interaction.commandName === "balance") {
-
-    const { data } = await supabase
-      .from("players")
-      .select("oro,banco")
-      .eq("id", userId)
-      .single();
-
-    if (!data) return interaction.reply("No tienes personaje.");
-
-    return interaction.reply(
-`💰 Oro: ${data.oro}
-🏦 Banco: ${data.banco}`
-    );
-  }
-
-  // ===== DEPOSITAR =====
-  if (interaction.commandName === "depositar") {
-
-    const cantidad = interaction.options.getInteger("cantidad");
-    if (!cantidad || cantidad <= 0)
-      return interaction.reply("Cantidad inválida.");
-
-    const { data } = await supabase
-      .from("players")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
-    if (!data || data.oro < cantidad)
-      return interaction.reply("No tienes suficiente oro.");
-
-    await supabase.from("players")
-      .update({
-        oro: data.oro - cantidad,
-        banco: data.banco + cantidad
-      })
-      .eq("id", userId);
-
-    return interaction.reply("Depositado correctamente.");
-  }
-
-  // ===== RETIRAR =====
-  if (interaction.commandName === "retirar") {
-
-    const cantidad = interaction.options.getInteger("cantidad");
-    if (!cantidad || cantidad <= 0)
-      return interaction.reply("Cantidad inválida.");
-
-    const { data } = await supabase
-      .from("players")
-      .select("*")
-      .eq("id", userId)
-      .single();
-
-    if (!data || data.banco < cantidad)
-      return interaction.reply("No tienes suficiente en banco.");
-
-    await supabase.from("players")
-      .update({
-        oro: data.oro + cantidad,
-        banco: data.banco - cantidad
-      })
-      .eq("id", userId);
-
-    return interaction.reply("Retirado correctamente.");
-  }
-
-  // ===== RANKING =====
-  if (interaction.commandName === "ranking") {
-
-    const { data } = await supabase
-      .from("players")
-      .select("id,nivel")
-      .order("nivel", { ascending: false })
-      .limit(5);
-
-    let texto = "🏆 TOP 5\n";
-
-    if (data) {
-      data.forEach((p, i) => {
-        texto += `${i + 1}. ${p.id} - Nivel ${p.nivel}\n`;
-      });
+    // -------------------
+    // /mascotas
+    // -------------------
+    if(cmd === '/mascotas') {
+        await createPlayer(message.author.id);
+        const { data: pets } = await supabase.from('inventario').select('item_id, cantidad, items(*)').eq('player_id', message.author.id).eq('items.tipo','pet');
+        if(!pets || pets.length === 0) return message.reply("🐾 No tienes mascotas");
+        let petText = "🐾 Tus mascotas:\n";
+        pets.forEach(p => petText += `${p.items.nombre} (${p.items.rareza}) - ${p.items.efecto}\n`);
+        message.reply(petText);
     }
 
-    return interaction.reply(texto);
-  }
+    // -------------------
+    // /equipar
+    // -------------------
+    if(cmd === '/equipar') {
+        const itemName = args.join(' ');
+        if(!itemName) return message.reply("❌ Debes indicar el nombre del item a equipar");
+        const { data: itemData } = await supabase.from('items').select('*').ilike('nombre', itemName).single();
+        if(!itemData) return message.reply("❌ Item no encontrado");
+        message.reply(`⚔️ Has equipado ${itemData.nombre}`);
+        // Aquí se puede agregar lógica de equipamiento y buffs de mascotas
+    }
+
+    // -------------------
+    // /minar
+    // -------------------
+    if(cmd === '/minar') {
+        await createPlayer(message.author.id);
+        const { data: minerals } = await supabase.from('items').select('*').eq('tipo','mineral');
+        const loot = minerals[Math.floor(Math.random()*minerals.length)];
+        await supabase.from('inventario').insert({ player_id: message.author.id, item_id: loot.id, cantidad:1 });
+        message.reply(`⛏ Has minado: ${loot.nombre} (${loot.rareza})`);
+    }
+
+    // -------------------
+    // /pescar
+    // -------------------
+    if(cmd === '/pescar') {
+        await createPlayer(message.author.id);
+        const { data: fishes } = await supabase.from('items').select('*').eq('tipo','fish');
+        const loot = fishes[Math.floor(Math.random()*fishes.length)];
+        await supabase.from('inventario').insert({ player_id: message.author.id, item_id: loot.id, cantidad:1 });
+        message.reply(`🎣 Has pescado: ${loot.nombre} (${loot.rareza})`);
+    }
+
+    // -------------------
+    // /tienda
+    // -------------------
+    if(cmd === '/tienda') {
+        const { data: marketItems } = await supabase.from('market').select('item_id, precio, items(*)');
+        let text = "🛒 Tienda global:\n";
+        marketItems.forEach(m => text += `${m.items.nombre} (${m.items.rareza}) - ${m.precio} oro\n`);
+        message.reply(text);
+    }
+
+    // -------------------
+    // /misiones
+    // -------------------
+    if(cmd === '/misiones') {
+        const { data: misiones } = await supabase.from('misiones').select('*');
+        let text = "📜 Misiones disponibles:\n";
+        misiones.forEach(m => text += `${m.nombre} (Nivel mínimo: ${m.nivel_min}) - XP:${m.recompensa_xp} Oro:${m.recompensa_oro}\n`);
+        message.reply(text);
+    }
+
+    // -------------------
+    // /combate
+    // -------------------
+    if(cmd === '/combate') {
+        await createPlayer(message.author.id);
+        const { data: enemigos } = await supabase.from('enemigos').select('*');
+        const enemy = enemigos[Math.floor(Math.random()*enemigos.length)];
+        message.reply(`⚔️ Te has encontrado con ${enemy.nombre} (Vida: ${enemy.vida})`);
+        // Aquí se puede agregar lógica de ataque, vida, buffs y XP
+    }
 
 });
 
-// =======================
+// ===========================
+// LOGIN BOT
+// ===========================
 client.login(process.env.TOKEN);
