@@ -19,7 +19,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const raridades = ["Común", "Raro", "Beryraro", "Épico", "Ultra Épico", "Legendario", "UR"];
 
 // -----------------
-// Loot de ejemplo
+// Loot y objetos
 // -----------------
 const armas = [
   { nombre: "Espada de fuego", tipo: "arma", nivel: 1, raridad: "Común" },
@@ -39,6 +39,12 @@ const mascotas = [
   { nombre: "Fénix", tipo: "UR" }
 ];
 
+const items = [
+  { nombre: "Poción de vida", tipo: "consumible" },
+  { nombre: "Caña de pescar UR", tipo: "herramienta" },
+  { nombre: "Pico de minería UR", tipo: "herramienta" }
+];
+
 const enemigos = [
   { nombre: "Slime Verde", nivel: 1, oro: 50, xp: 50, loot: ["Espada de fuego"] },
   { nombre: "Goblin Guerrero", nivel: 5, oro: 150, xp: 150, loot: ["Armadura ligera"] },
@@ -52,7 +58,7 @@ const misiones = [
 ];
 
 // -----------------
-// Comandos Slash
+// Comandos slash
 // -----------------
 const commands = [
   new SlashCommandBuilder().setName("elegirmagia").setDescription("Elige tu magia")
@@ -112,7 +118,6 @@ async function agregarItem(userId, itemNombre, cantidad = 1) {
 }
 
 function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-
 function getRandomElement(array) { return array[getRandomInt(0, array.length-1)]; }
 
 // -----------------
@@ -161,6 +166,55 @@ Mascotas: ${mascotasStr}`
   }
 
   // -----------------
+  // Bag
+  // -----------------
+  if (cmd === "bag") {
+    const mochila = personaje.items || [];
+    if (!mochila.length) return interaction.reply("👜 Tu mochila está vacía.");
+    const lista = mochila.map(i => `${i.nombre} x${i.cantidad}`).join("\n");
+    return interaction.reply(`👜 Mochila:\n${lista}`);
+  }
+
+  // -----------------
+  // Balance
+  // -----------------
+  if (cmd === "balance") {
+    return interaction.reply(`💰 Oro: ${personaje.oro}\n🏦 Banco: ${personaje.oro_banco}`);
+  }
+
+  // -----------------
+  // Tienda
+  // -----------------
+  if (cmd === "tienda") {
+    const lista = [...armas, ...armaduras, ...mascotas, ...items].map(i => `${i.nombre} (${i.tipo}, ${i.raridad || "Normal"})`).join("\n");
+    return interaction.reply(`🏪 Tienda disponible:\n${lista}`);
+  }
+
+  // -----------------
+  // Equipar
+  // -----------------
+  if (cmd === "equipar") {
+    const tipo = interaction.options.getString("tipo");
+    const nombre = interaction.options.getString("nombre");
+    if (tipo === "arma") await actualizarPersonaje(userId, { arma_equipada: nombre });
+    else if (tipo === "armadura") await actualizarPersonaje(userId, { armadura_equipada: nombre });
+    else if (tipo === "mascota") {
+      const masc = personaje.mascotas || [];
+      if (!masc.find(m => m.nombre === nombre)) return interaction.reply("No tienes esa mascota.");
+      await actualizarPersonaje(userId, { mascotas: masc });
+    }
+    return interaction.reply(`✅ ${tipo} ${nombre} equipada.`);
+  }
+
+  // -----------------
+  // Usar item
+  // -----------------
+  if (cmd === "use") {
+    const item = interaction.options.getString("item");
+    await interaction.reply(`Usaste ${item}.`);
+  }
+
+  // -----------------
   // Minar
   // -----------------
   if (cmd === "minar") {
@@ -183,20 +237,41 @@ Mascotas: ${mascotasStr}`
   }
 
   // -----------------
-  // Aventura automática (misiones)
+  // Aventura
   // -----------------
   if (cmd === "aventura") {
     const mision = getRandomElement(misiones);
-    await agregarItem(userId, getRandomElement([...armas.map(a=>a.nombre), ...armaduras.map(a=>a.nombre), ...mascotas.map(m=>m.nombre)]));
-    await actualizarPersonaje(userId, {
-      xp: personaje.xp + mision.xp,
-      oro: personaje.oro + mision.oro
-    });
+    const loot = mision.loot || [];
+    for (let i of loot) await agregarItem(userId, i);
+    await actualizarPersonaje(userId, { xp: personaje.xp + mision.xp, oro: personaje.oro + mision.oro });
     return interaction.reply(`🏰 Has completado la misión "${mision.nombre}"!
 +${mision.xp} XP
 +${mision.oro} Oro
-Loot: ${mision.loot.join(", ")}`);
+Loot: ${loot.join(", ")}`);
   }
+
+  // -----------------
+  // Ayuda
+  // -----------------
+  if (cmd === "ayuda") {
+    return interaction.reply(
+`📘 Fairy Slayers Pro Ultimate
+
+/elegirmagia
+/info
+/batalla
+/aventura
+/tienda
+/use
+/bag
+/balance
+/mascotas
+/equipar
+/minar
+/pescar`
+    );
+  }
+
 });
 
 client.login(process.env.TOKEN);
