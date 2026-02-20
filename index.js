@@ -1,7 +1,9 @@
 // Importar dependencias correctamente
 const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
 const express = require('express');
-require('dotenv').config();
+require('dotenv').config("MTQ3MzI5Njc0OTE5NTE2NTg0OA.GxZWQ1.L22OTO9cZDF-_Giz1AnKP7r-NkYJ4I5PzZWeBo");
+
+TOKEN = ('dotenv')
 
 // ------------------------------
 // SERVIDOR WEB CON ESTADO REAL
