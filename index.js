@@ -3,39 +3,24 @@ const express = require("express");
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
 const { createClient } = require("@supabase/supabase-js");
 
-// =========================
-// Verificar Token
-// =========================
 if (!process.env.TOKEN) {
   console.log("❌ TOKEN no encontrado en Environment Variables");
   process.exit(1);
 }
 
-// =========================
-// Cliente Discord
-// =========================
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// =========================
-// Servidor Web (Render keep alive)
-// =========================
 const app = express();
 app.get("/", (req, res) => res.send("Fairy Slayers activo"));
 app.listen(10000, () => console.log("Servidor web activo en puerto 10000"));
 
-// =========================
-// Supabase (Anon/Public Key)
-// =========================
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY  // aquí tu anon/public key
+  process.env.SUPABASE_KEY
 );
 
-// =========================
-// Comandos
-// =========================
 const CLIENT_ID = process.env.CLIENT_ID;
 
 const commands = [
@@ -69,28 +54,19 @@ const commands = [
     .setDescription("Ver comandos")
 ].map(cmd => cmd.toJSON());
 
-// =========================
-// Conectar y registrar comandos
-// =========================
 client.once("clientReady", async () => {
   console.log(`✅ Bot conectado como ${client.user.tag}`);
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
-  try {
-    await rest.put(
-      Routes.applicationCommands(CLIENT_ID),
-      { body: commands }
-    );
-    console.log("✅ Comandos slash registrados");
-  } catch (error) {
-    console.error("❌ Error registrando comandos:", error);
-  }
+  await rest.put(
+    Routes.applicationCommands(CLIENT_ID),
+    { body: commands }
+  );
+
+  console.log("✅ Comandos slash registrados");
 });
 
-// =========================
-// Manejo de interacciones
-// =========================
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -102,19 +78,17 @@ client.on("interactionCreate", async interaction => {
   if (interaction.commandName === "elegirmagia") {
     const magia = interaction.options.getString("tipo");
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("personajes")
       .select("*")
       .eq("id", userId)
       .single();
 
-    if (error) console.log("❌ Error select elegirmagia:", error);
-
     if (data) {
       return interaction.reply("Ya tienes personaje creado.");
     }
 
-    const { error: insertError } = await supabase.from("personajes").insert({
+    await supabase.from("personajes").insert({
       id: userId,
       magia,
       nivel: 1,
@@ -125,11 +99,6 @@ client.on("interactionCreate", async interaction => {
       lastbatalla: Date.now()
     });
 
-    if (insertError) {
-      console.log("❌ Error insert personaje:", insertError);
-      return interaction.reply("Error al crear personaje, contacta al admin.");
-    }
-
     return interaction.reply(`✨ Personaje creado con magia ${magia}. Vida 500.`);
   }
 
@@ -137,13 +106,11 @@ client.on("interactionCreate", async interaction => {
   // INFO
   // =========================
   if (interaction.commandName === "info") {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("personajes")
       .select("*")
       .eq("id", userId)
       .single();
-
-    if (error) console.log("❌ Error select info:", error);
 
     if (!data) return interaction.reply("No tienes personaje.");
 
@@ -161,20 +128,18 @@ Vida: ${data.vida}/${data.maxvida}`
   // BATALLA
   // =========================
   if (interaction.commandName === "batalla") {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("personajes")
       .select("*")
       .eq("id", userId)
       .single();
 
-    if (error) console.log("❌ Error select batalla:", error);
     if (!data) return interaction.reply("No tienes personaje.");
 
     let nuevaVida = data.vida - 100;
     if (nuevaVida < 0) nuevaVida = 0;
 
-    const { error: updateError } = await supabase
-      .from("personajes")
+    await supabase.from("personajes")
       .update({
         vida: nuevaVida,
         xp: data.xp + 100,
@@ -182,8 +147,6 @@ Vida: ${data.vida}/${data.maxvida}`
         lastbatalla: Date.now()
       })
       .eq("id", userId);
-
-    if (updateError) console.log("❌ Error update batalla:", updateError);
 
     return interaction.reply(
       `⚔️ Batalla completada!
@@ -197,12 +160,12 @@ Vida restante: ${nuevaVida}`
   // BETATESTER
   // =========================
   if (interaction.commandName === "betatester") {
-    const { error } = await supabase
-      .from("personajes")
-      .update({ xp: 3000, oro: 5000 })
+    await supabase.from("personajes")
+      .update({
+        xp: 3000,
+        oro: 5000
+      })
       .eq("id", userId);
-
-    if (error) console.log("❌ Error betatester:", error);
 
     return interaction.reply("🎁 Recompensa beta aplicada.");
   }
@@ -230,7 +193,4 @@ Vida restante: ${nuevaVida}`
   }
 });
 
-// =========================
-// LOGIN BOT
-// =========================
 client.login(process.env.TOKEN);
