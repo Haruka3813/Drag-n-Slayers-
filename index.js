@@ -69,7 +69,9 @@ client.once("clientReady", async () => {
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
   await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
   console.log("Comandos registrados");
-});// =========================
+});
+
+// =========================
 // FUNCIONES AUXILIARES
 // =========================
 
@@ -223,7 +225,9 @@ Vida: ${pj.vida}/${pj.maxvida}`
     return interaction.editReply("🐾 Usa /equipar ID para equipar mascota.");
   }
 
-});// =========================
+});
+
+// =========================
   // BATALLA
   // =========================
   if (interaction.commandName === "batalla") {
