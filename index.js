@@ -1,353 +1,252 @@
 require('dotenv').config();
-const express = require("express");
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
-const { createClient } = require("@supabase/supabase-js");
+const { Client, GatewayIntentBits, SlashCommandBuilder, Routes } = require('discord.js');
+const { createClient } = require('@supabase/supabase-js');
+const { REST } = require('@discordjs/rest');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+    intents: [GatewayIntentBits.Guilds]
 });
-
-const app = express();
-app.get("/", (req, res) => res.send("RPG activo"));
-app.listen(10000, () => console.log("Web online"));
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_KEY
 );
 
+const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 
+const XP_POR_NIVEL = 100;
+const INTERES_BANCO = 0.05;
+
+/* =============================
+   FUNCIONES BASE
+============================= */
+
+async function obtenerJugador(userId) {
+    let { data } = await supabase
+        .from('players')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+    if (!data) {
+        const nuevo = {
+            id: userId,
+            nivel: 1,
+            xp: 0,
+            oro: 100,
+            banco: 0,
+            arma_equipped: null,
+            mascota_activa: null
+        };
+
+        await supabase.from('players').insert(nuevo);
+        return nuevo;
+    }
+
+    return data;
+}
+
+async function agregarXP(userId, cantidad) {
+    let jugador = await obtenerJugador(userId);
+    let nuevoXP = jugador.xp + cantidad;
+    let nuevoNivel = jugador.nivel;
+
+    while (nuevoXP >= XP_POR_NIVEL) {
+        nuevoXP -= XP_POR_NIVEL;
+        nuevoNivel++;
+    }
+
+    await supabase
+        .from('players')
+        .update({ xp: nuevoXP, nivel: nuevoNivel })
+        .eq('id', userId);
+
+    return { nivel: nuevoNivel, xp: nuevoXP };
+}
+
+function colorRareza(r) {
+    if (r === "legendario") return 0xffd700;
+    if (r === "epico") return 0x9b59b6;
+    if (r === "raro") return 0x3498db;
+    return 0xffffff;
+}
+
+/* =============================
+   SLASH COMMANDS
+============================= */
+
 const commands = [
+    new SlashCommandBuilder().setName('perfil').setDescription('Ver tu perfil'),
+    new SlashCommandBuilder().setName('balance').setDescription('Ver tu oro'),
+    new SlashCommandBuilder().setName('trabajar').setDescription('Ganar oro y XP'),
+    new SlashCommandBuilder().setName('loot').setDescription('Buscar objeto'),
+    new SlashCommandBuilder().setName('bag').setDescription('Ver inventario'),
+    new SlashCommandBuilder()
+        .setName('equipar')
+        .setDescription('Equipar arma')
+        .addStringOption(o => o.setName('id').setDescription('ID del item').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('usar')
+        .setDescription('Usar item')
+        .addStringOption(o => o.setName('id').setDescription('ID del item').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('depositar')
+        .setDescription('Depositar oro al banco')
+        .addIntegerOption(o => o.setName('cantidad').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('retirar')
+        .setDescription('Retirar oro del banco')
+        .addIntegerOption(o => o.setName('cantidad').setRequired(true)),
+];
 
-new SlashCommandBuilder()
-.setName("elegirmagia")
-.setDescription("Crear personaje")
-.addStringOption(o =>
-  o.setName("tipo")
-  .setDescription("Tipo")
-  .setRequired(true)
-  .addChoices(
-    { name: "Fuego", value: "fuego" },
-    { name: "Luz", value: "luz" },
-    { name: "Oscuridad", value: "oscuridad" }
-  )
-),
+const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-new SlashCommandBuilder().setName("info").setDescription("Ver perfil"),
-new SlashCommandBuilder().setName("batalla").setDescription("Pelear contra enemigo"),
-new SlashCommandBuilder().setName("bag").setDescription("Ver inventario"),
-new SlashCommandBuilder().setName("balance").setDescription("Ver dinero"),
-new SlashCommandBuilder().setName("minar").setDescription("Ir a minar"),
-new SlashCommandBuilder().setName("pescar").setDescription("Ir a pescar"),
-new SlashCommandBuilder().setName("tienda").setDescription("Ver tienda"),
-new SlashCommandBuilder()
-.setName("equipar")
-.setDescription("Equipar item")
-.addStringOption(o =>
-  o.setName("id")
-  .setDescription("ID del item")
-  .setRequired(true)
-),
+(async () => {
+    await rest.put(
+        Routes.applicationCommands(CLIENT_ID),
+        { body: commands }
+    );
+})();
 
-new SlashCommandBuilder()
-.setName("usar")
-.setDescription("Usar item")
-.addStringOption(o =>
-  o.setName("id")
-  .setDescription("ID del item")
-  .setRequired(true)
-),
+/* =============================
+   EVENTO PRINCIPAL
+============================= */
 
-new SlashCommandBuilder().setName("misiones").setDescription("Ver misiones"),
-new SlashCommandBuilder().setName("mascota").setDescription("Ver mascotas")
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
 
-].map(c => c.toJSON());
+    const userId = interaction.user.id;
 
-client.once("clientReady", async () => {
-  console.log(`Bot listo ${client.user.tag}`);
-  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-  console.log("Comandos registrados");
-});
+    /* PERFIL */
+    if (interaction.commandName === 'perfil') {
+        const jugador = await obtenerJugador(userId);
 
-// =========================
-// FUNCIONES AUXILIARES
-// =========================
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function getPersonaje(userId) {
-  const { data } = await supabase
-    .from("personajes")
-    .select("*")
-    .eq("id", userId)
-    .single();
-  return data;
-}
-
-// =========================
-// INTERACCIONES
-// =========================
-
-client.on("interactionCreate", async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-
-  await interaction.deferReply(); // evita "application did not respond"
-
-  const userId = interaction.user.id;
-
-  // =========================
-  // CREAR PERSONAJE
-  // =========================
-  if (interaction.commandName === "elegirmagia") {
-
-    const magia = interaction.options.getString("tipo");
-    const existe = await getPersonaje(userId);
-
-    if (existe) {
-      return interaction.editReply("⚠ Ya tienes personaje.");
+        await interaction.reply({
+            embeds: [{
+                title: `Perfil de ${interaction.user.username}`,
+                color: 0x00ff99,
+                fields: [
+                    { name: "Nivel", value: jugador.nivel.toString(), inline: true },
+                    { name: "XP", value: jugador.xp.toString(), inline: true },
+                    { name: "Oro", value: jugador.oro.toString(), inline: true },
+                    { name: "Banco", value: jugador.banco.toString(), inline: true }
+                ]
+            }]
+        });
     }
 
-    const { error } = await supabase.from("personajes").insert({
-      id: userId,
-      magia,
-      nivel: 1,
-      xp: 0,
-      oro: 500,
-      vida: 500,
-      maxvida: 500
-    });
-
-    if (error) {
-      console.log(error);
-      return interaction.editReply("Error creando personaje.");
+    /* BALANCE */
+    if (interaction.commandName === 'balance') {
+        const jugador = await obtenerJugador(userId);
+        await interaction.reply(`💰 Oro: ${jugador.oro}`);
     }
 
-    return interaction.editReply(`✨ Personaje creado con magia ${magia}`);
-  }
+    /* TRABAJAR */
+    if (interaction.commandName === 'trabajar') {
+        const oro = Math.floor(Math.random() * 50) + 20;
+        const xp = 20;
 
-  // =========================
-  // PERFIL
-  // =========================
-  if (interaction.commandName === "info") {
+        await supabase.rpc('sumar_oro', { uid: userId, cantidad: oro });
+        const nivel = await agregarXP(userId, xp);
 
-    const pj = await getPersonaje(userId);
-    if (!pj) return interaction.editReply("No tienes personaje.");
+        await interaction.reply(`Trabajaste y ganaste ${oro} oro y ${xp} XP.`);
+    }
 
-    return interaction.editReply(
-`📜 Perfil
-Magia: ${pj.magia}
-Nivel: ${pj.nivel}
-XP: ${pj.xp}
-Oro: ${pj.oro}
-Vida: ${pj.vida}/${pj.maxvida}`
-    );
-  }
+    /* LOOT */
+    if (interaction.commandName === 'loot') {
+        const { data: items } = await supabase.from('items').select('*');
+        const random = items[Math.floor(Math.random() * items.length)];
 
-  // =========================
-  // BALANCE
-  // =========================
-  if (interaction.commandName === "balance") {
+        await supabase.from('inventario').insert({
+            user_id: userId,
+            item_id: random.id
+        });
 
-    const pj = await getPersonaje(userId);
-    if (!pj) return interaction.editReply("No tienes personaje.");
+        await interaction.reply({
+            embeds: [{
+                title: `Encontraste ${random.nombre}`,
+                description: random.efecto || "Sin efecto",
+                color: colorRareza(random.rareza)
+            }]
+        });
+    }
 
-    const { data } = await supabase
-      .from("banco")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
+    /* BAG */
+    if (interaction.commandName === 'bag') {
+        const { data } = await supabase
+            .from('inventario')
+            .select('items(*)')
+            .eq('user_id', userId);
 
-    const bancoDinero = data ? data.dinero : 0;
+        if (!data || data.length === 0)
+            return interaction.reply("Tu inventario está vacío.");
 
-    return interaction.editReply(
-`💰 Dinero en mano: ${pj.oro}
-🏦 Banco: ${bancoDinero}`
-    );
-  }
+        const lista = data.map(i => `• ${i.items.nombre}`).join("\n");
 
-  // =========================
-  // BAG
-  // =========================
-  if (interaction.commandName === "bag") {
+        await interaction.reply({
+            embeds: [{
+                title: "🎒 Inventario",
+                description: lista
+            }]
+        });
+    }
 
-    const { data } = await supabase
-      .from("inventario")
-      .select("*")
-      .eq("user_id", userId);
+    /* EQUIPAR */
+    if (interaction.commandName === 'equipar') {
+        const id = interaction.options.getString('id');
 
-    if (!data || data.length === 0)
-      return interaction.editReply("🎒 Inventario vacío.");
+        await supabase
+            .from('players')
+            .update({ arma_equipped: id })
+            .eq('id', userId);
 
-    let texto = "🎒 Inventario:\n";
-    data.forEach(i => {
-      texto += `ID: ${i.item_id} x${i.cantidad}\n`;
-    });
+        await interaction.reply("Arma equipada correctamente.");
+    }
 
-    return interaction.editReply(texto);
-  }
+    /* USAR */
+    if (interaction.commandName === 'usar') {
+        const id = interaction.options.getString('id');
+        await interaction.reply("Item usado (sistema expandible).");
+    }
 
-  // =========================
-  // EQUIPAR
-  // =========================
-  if (interaction.commandName === "equipar") {
+    /* DEPOSITAR */
+    if (interaction.commandName === 'depositar') {
+        const cantidad = interaction.options.getInteger('cantidad');
+        const jugador = await obtenerJugador(userId);
 
-    const itemId = interaction.options.getString("id");
+        if (jugador.oro < cantidad)
+            return interaction.reply("No tienes suficiente oro.");
 
-    const { data } = await supabase
-      .from("items")
-      .select("*")
-      .eq("id", itemId)
-      .single();
+        await supabase
+            .from('players')
+            .update({
+                oro: jugador.oro - cantidad,
+                banco: jugador.banco + cantidad
+            })
+            .eq('id', userId);
 
-    if (!data) return interaction.editReply("Item no existe.");
+        await interaction.reply(`Depositaste ${cantidad} oro.`);
+    }
 
-    await sleep(1000); // estilo lento
+    /* RETIRAR */
+    if (interaction.commandName === 'retirar') {
+        const cantidad = interaction.options.getInteger('cantidad');
+        const jugador = await obtenerJugador(userId);
 
-    return interaction.editReply(`⚔ Has equipado ${data.nombre}`);
-  }
+        if (jugador.banco < cantidad)
+            return interaction.reply("No tienes suficiente en el banco.");
 
-  // =========================
-  // MASCOTA
-  // =========================
-  if (interaction.commandName === "mascota") {
+        await supabase
+            .from('players')
+            .update({
+                oro: jugador.oro + cantidad,
+                banco: jugador.banco - cantidad
+            })
+            .eq('id', userId);
 
-    const { data } = await supabase
-      .from("inventario")
-      .select("*")
-      .eq("user_id", userId);
-
-    if (!data) return interaction.editReply("No tienes mascotas.");
-
-    return interaction.editReply("🐾 Usa /equipar ID para equipar mascota.");
-  }
-
+        await interaction.reply(`Retiraste ${cantidad} oro.`);
+    }
 });
 
-// =========================
-  // BATALLA
-  // =========================
-  if (interaction.commandName === "batalla") {
-
-    const pj = await getPersonaje(userId);
-    if (!pj) return interaction.editReply("No tienes personaje.");
-
-    const { data: enemigos } = await supabase
-      .from("enemigos")
-      .select("*");
-
-    if (!enemigos || enemigos.length === 0)
-      return interaction.editReply("No hay enemigos.");
-
-    const enemigo = enemigos[Math.floor(Math.random() * enemigos.length)];
-
-    await sleep(1500);
-
-    let dañoJugador = Math.floor(Math.random() * 100) + 50;
-    let dañoEnemigo = enemigo.ataque;
-
-    let nuevaVida = pj.vida - dañoEnemigo;
-    if (nuevaVida < 0) nuevaVida = 0;
-
-    let oroGanado = enemigo.recompensa_oro;
-    let xpGanado = enemigo.recompensa_xp;
-
-    await supabase.from("personajes").update({
-      vida: nuevaVida,
-      oro: pj.oro + oroGanado,
-      xp: pj.xp + xpGanado
-    }).eq("id", userId);
-
-    return interaction.editReply(
-`⚔ Peleaste contra ${enemigo.nombre}
-
-Recibiste ${dañoEnemigo} de daño
-Ganaste ${xpGanado} XP
-Ganaste ${oroGanado} oro
-
-Vida restante: ${nuevaVida}`
-    );
-  }
-
-  // =========================
-  // MINAR
-  // =========================
-  if (interaction.commandName === "minar") {
-
-    const pj = await getPersonaje(userId);
-    if (!pj) return interaction.editReply("No tienes personaje.");
-
-    const { data: minerales } = await supabase
-      .from("items")
-      .select("*")
-      .eq("tipo", "mineral");
-
-    if (!minerales || minerales.length === 0)
-      return interaction.editReply("No hay minerales.");
-
-    const drop = minerales[Math.floor(Math.random() * minerales.length)];
-
-    await supabase.from("inventario").insert({
-      user_id: userId,
-      item_id: drop.id,
-      cantidad: 1
-    });
-
-    await sleep(1200);
-
-    return interaction.editReply(`⛏ Minaste y encontraste ${drop.nombre}`);
-  }
-
-  // =========================
-  // PESCAR
-  // =========================
-  if (interaction.commandName === "pescar") {
-
-    const pj = await getPersonaje(userId);
-    if (!pj) return interaction.editReply("No tienes personaje.");
-
-    const { data: peces } = await supabase
-      .from("items")
-      .select("*")
-      .eq("tipo", "fish");
-
-    if (!peces || peces.length === 0)
-      return interaction.editReply("No hay peces.");
-
-    const drop = peces[Math.floor(Math.random() * peces.length)];
-
-    await supabase.from("inventario").insert({
-      user_id: userId,
-      item_id: drop.id,
-      cantidad: 1
-    });
-
-    await sleep(1500);
-
-    return interaction.editReply(`🎣 Pescaste ${drop.nombre}`);
-  }
-
-  // =========================
-  // MISIONES
-  // =========================
-  if (interaction.commandName === "misiones") {
-
-    const { data } = await supabase
-      .from("misiones")
-      .select("*");
-
-    if (!data) return interaction.editReply("No hay misiones.");
-
-    let texto = "📜 Misiones disponibles:\n\n";
-
-    data.forEach(m => {
-      texto += `${m.nombre}
-Recompensa: ${m.recompensa_oro} oro / ${m.recompensa_xp} XP\n\n`;
-    });
-
-    return interaction.editReply(texto);
-  });
-client.login(process.env.TOKEN);
+client.login(TOKEN);
