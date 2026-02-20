@@ -3,13 +3,9 @@ const express = require("express");
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
 const { createClient } = require("@supabase/supabase-js");
 
-if (!process.env.TOKEN) {
-  console.log("❌ TOKEN no encontrado en Environment Variables");
-  process.exit(1);
-}
+if (!process.env.TOKEN) { console.log("❌ TOKEN no encontrado"); process.exit(1); }
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-
 const app = express();
 app.get("/", (req, res) => res.send("Fairy Slayers Pro Ultimate activo"));
 app.listen(10000, () => console.log("Servidor web activo en puerto 10000"));
@@ -17,9 +13,9 @@ app.listen(10000, () => console.log("Servidor web activo en puerto 10000"));
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const CLIENT_ID = process.env.CLIENT_ID;
 
-// ==========================
+// =========================
 // Comandos slash
-// ==========================
+// =========================
 const commands = [
   new SlashCommandBuilder().setName("elegirmagia").setDescription("Elige tu magia")
     .addStringOption(opt => opt.setName("tipo").setDescription("Tipo de magia").setRequired(true)
@@ -28,7 +24,7 @@ const commands = [
         { name: "Mago Celestial", value: "celestial" },
         { name: "Mago Oscuro", value: "oscuro" }
       )),
-  new SlashCommandBuilder().setName("info").setDescription("Ver tu perfil completo"),
+  new SlashCommandBuilder().setName("info").setDescription("Ver tu perfil"),
   new SlashCommandBuilder().setName("batalla").setDescription("Buscar enemigo PvP o PvE"),
   new SlashCommandBuilder().setName("betatester").setDescription("Recompensa beta"),
   new SlashCommandBuilder().setName("miau").setDescription("Recibir mascota inicial"),
@@ -51,9 +47,9 @@ const commands = [
   new SlashCommandBuilder().setName("ayuda").setDescription("Ver comandos")
 ].map(cmd => cmd.toJSON());
 
-// ==========================
+// =========================
 // Registrar comandos
-// ==========================
+// =========================
 client.once("ready", async () => {
   console.log(`✅ Bot conectado como ${client.user.tag}`);
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -61,23 +57,20 @@ client.once("ready", async () => {
   console.log("✅ Comandos slash registrados");
 });
 
-// ==========================
+// =========================
 // Funciones auxiliares
-// ==========================
+// =========================
 async function getPersonaje(userId) {
   const { data } = await supabase.from("personajes").select("*").eq("id", userId).single();
   return data;
 }
-
 async function actualizarPersonaje(userId, update) {
   await supabase.from("personajes").update(update).eq("id", userId);
 }
-
 async function getItem(nombre) {
   const { data } = await supabase.from("items").select("*").eq("nombre", nombre).single();
   return data;
 }
-
 async function agregarItem(userId, itemNombre, cantidad = 1) {
   const personaje = await getPersonaje(userId);
   if (!personaje) return;
@@ -88,9 +81,9 @@ async function agregarItem(userId, itemNombre, cantidad = 1) {
   await actualizarPersonaje(userId, { items: mochila });
 }
 
-// ==========================
+// =========================
 // Interacciones
-// ==========================
+// =========================
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const userId = interaction.user.id;
@@ -103,15 +96,12 @@ client.on("interactionCreate", async interaction => {
     const data = await getPersonaje(userId);
     if (data) return interaction.reply("Ya tienes personaje creado.");
 
-    const { error: insertError } = await supabase.from("personajes").insert({
+    const { error } = await supabase.from("personajes").insert({
       id: userId, magia, nivel: 1, xp: 0, oro: 0, oro_banco: 0,
       vida: 500, maxvida: 500, lastbatalla: Date.now(), regeneracion: Date.now(),
       mascotas: [], arma_equipada: null, items: []
     });
-    if (insertError) {
-      console.log("❌ Error insert personaje:", insertError);
-      return interaction.reply("Ocurrió un error creando tu personaje.");
-    }
+    if (error) return interaction.reply("Ocurrió un error creando tu personaje.");
     return interaction.reply(`✨ Personaje creado con magia ${magia}. Vida 500.`);
   }
 
@@ -121,10 +111,8 @@ client.on("interactionCreate", async interaction => {
   if (interaction.commandName === "info") {
     const data = await getPersonaje(userId);
     if (!data) return interaction.reply("No tienes personaje.");
-
     const mascotas = data.mascotas?.map(m => `${m.nombre} (${m.tipo})`).join(", ") || "Ninguna";
     const arma = data.arma_equipada || "Ninguna";
-
     return interaction.reply(
 `📜 **Perfil**
 Magia: ${data.magia}
@@ -171,12 +159,10 @@ Mascotas: ${mascotas}`
     if (!item || item.cantidad <= 0) return interaction.reply("No tienes ese item.");
     const itemInfo = await getItem(itemNombre);
     if (!itemInfo) return interaction.reply("Item inválido.");
-    // Aplica efecto
     const efectos = itemInfo.efecto || {};
     const nuevoOro = (data.oro || 0) + (efectos.oro || 0);
     const nuevaVida = Math.min((data.vida || 0) + (efectos.vida || 0), data.maxvida);
     const nuevoXP = (data.xp || 0) + (efectos.xp || 0);
-    // Actualiza mochila
     item.cantidad -= 1;
     await actualizarPersonaje(userId, { oro: nuevoOro, vida: nuevaVida, xp: nuevoXP, items: mochila });
     return interaction.reply(`✅ Usaste ${itemNombre}. Vida: ${nuevaVida}, XP: ${nuevoXP}, Oro: ${nuevoOro}`);
@@ -216,8 +202,7 @@ Mascotas: ${mascotas}`
   }
 
   // --------------------
-  // Aquí seguirían los demás comandos: batalla, tienda, equipar, gremio, aventura, betatester, miau, sorteo, ayuda
-  // Tal como en la versión Pro Ultimate
+  // Aquí integrar los demás comandos Pro Ultimate: batalla, tienda, equipar, gremio, aventura, betatester, miau, sorteo, ayuda
   // --------------------
 });
 
