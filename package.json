@@ -1,12 +1,16 @@
 {
-"name": "dragon-slayers-rpg-bot",
-"version": "1.0.0",
-"description": "RPG bot",
-"main": "index.js",
-"scripts": {
-"start": "node index.js"
-},
-"dependencies": {
-"discord.js": "^14.14.1"
-}
+  "name": "dragon-slayers-rpg-bot",
+  "version": "1.0.0",
+  "description": "RPG bot para Discord",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1"
+  }
 }
