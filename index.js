@@ -346,7 +346,7 @@ new SlashCommandBuilder()
 .setDescription("Retirar")
 .addIntegerOption(o=>o.setName("amount").setRequired(true)),
 
-new SlashCommandBuilder().setName("ranking").setDescription("Ranking"),
+new SlashCommandBuilder().setName("ranking").setDescription("ver Ranking"),
 
 new SlashCommandBuilder().setName("pets").setDescription("Ver mascotas"),
 
