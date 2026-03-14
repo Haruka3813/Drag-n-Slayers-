@@ -13,7 +13,7 @@ const client = new Client({
  intents:[GatewayIntentBits.Guilds]
 })
 
-const TOKEN = "TOKEN_AQUI"
+const TOKEN = process.env.TOKEN
 
 //////////////////////////////////////////////////
 //// BASE DE DATOS
