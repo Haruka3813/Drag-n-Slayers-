@@ -1,22 +1,12 @@
 {
-  "name": "dragon-slayers-bot",
-  "version": "1.0.0",
-  "description": "RPG Dragon Slayers bot para Discord",
-  "main": "index.js",
-  "type": "commonjs",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "keywords": [
-    "discord",
-    "bot",
-    "rpg",
-    "dragon",
-    "slayer"
-  ],
-  "author": "Haruka3813",
-  "license": "MIT",
-  "dependencies": {
-    "discord.js": "^14.14.1"
-  }
+"name": "dragon-slayers-rpg-bot",
+"version": "1.0.0",
+"description": "RPG bot estilo Dragon Slayer",
+"main": "index.js",
+"scripts": {
+"start": "node index.js"
+},
+"dependencies": {
+"discord.js": "^14.14.1"
+}
 }
