@@ -1,7 +1,7 @@
 {
 "name": "dragon-slayers-rpg-bot",
 "version": "1.0.0",
-"description": "RPG bot estilo Dragon Slayer",
+"description": "RPG bot",
 "main": "index.js",
 "scripts": {
 "start": "node index.js"
