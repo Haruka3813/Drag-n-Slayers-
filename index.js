@@ -13,7 +13,7 @@ const client = new Client({
  intents:[GatewayIntentBits.Guilds]
 })
 
-const TOKEN = "MTQ3MzI5Njc0OTE5NTE2NTg0OA.Gtf_rg.EmbkjaY_XCx877NQDLCyjtENi4S-uZJrxtWyuk"
+const TOKEN = "TOKEN_AQUI"
 
 //////////////////////////////////////////////////
 //// BASE DE DATOS
