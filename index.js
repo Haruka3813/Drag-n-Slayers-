@@ -317,24 +317,48 @@ new SlashCommandBuilder().setName("shop").setDescription("Ver tienda"),
 new SlashCommandBuilder()
 .setName("buy")
 .setDescription("Comprar")
-.addStringOption(o=>o.setName("item").setRequired(true))
-.addIntegerOption(o=>o.setName("cantidad").setRequired(true)),
+.addStringOption(o =>
+ o.setName("item")
+ .setDescription("Item a comprar")
+ .setRequired(true)
+)
+.addIntegerOption(o =>
+ o.setName("cantidad")
+ .setDescription("Cantidad")
+ .setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("sell")
 .setDescription("Vender")
-.addStringOption(o=>o.setName("item").setRequired(true))
-.addIntegerOption(o=>o.setName("cantidad").setRequired(true)),
+.addStringOption(o =>
+ o.setName("item")
+ .setDescription("Item a vender")
+ .setRequired(true)
+)
+.addIntegerOption(o =>
+ o.setName("cantidad")
+ .setDescription("Cantidad")
+ .setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("equip")
 .setDescription("Equipar")
-.addStringOption(o=>o.setName("item").setRequired(true)),
+.addStringOption(o =>
+ o.setName("item")
+ .setDescription("Item a equipar")
+ .setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("forge")
 .setDescription("Forjar")
-.addStringOption(o=>o.setName("item").setRequired(true)),
+.addStringOption(o =>
+ o.setName("item")
+ .setDescription("Item a forjar")
+ .setRequired(true)
+),
  
 new SlashCommandBuilder()
 .setName("deposit")
