@@ -335,50 +335,70 @@ new SlashCommandBuilder()
 .setName("forge")
 .setDescription("Forjar")
 .addStringOption(o=>o.setName("item").setRequired(true)),
-
+ 
 new SlashCommandBuilder()
 .setName("deposit")
-.setDescription("Depositar")
-.addIntegerOption(o=>o.setName("amount").setRequired(true)),
+.setDescription("Depositar dinero en el banco")
+.addIntegerOption(o =>
+  o.setName("amount")
+   .setDescription("Cantidad de dinero a depositar")
+   .setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("withdraw")
-.setDescription("Retirar")
-.addIntegerOption(o=>o.setName("amount").setRequired(true)),
+.setDescription("Retirar dinero del banco")
+.addIntegerOption(o =>
+  o.setName("amount")
+   .setDescription("Cantidad de dinero a retirar")
+   .setRequired(true)
+),
 
-new SlashCommandBuilder().setName("ranking").setDescription("ver Ranking"),
+new SlashCommandBuilder()
+.setName("ranking")
+.setDescription("Ver ranking global del servidor"),
 
-new SlashCommandBuilder().setName("pets").setDescription("Ver mascotas"),
+new SlashCommandBuilder()
+.setName("pets")
+.setDescription("Ver tus mascotas"),
 
 new SlashCommandBuilder()
 .setName("petbuy")
-.setDescription("Comprar mascota")
-.addIntegerOption(o=>o.setName("id").setRequired(true)),
+.setDescription("Comprar una mascota")
+.addIntegerOption(o =>
+  o.setName("id")
+   .setDescription("ID de la mascota que quieres comprar")
+   .setRequired(true)
+),
 
 new SlashCommandBuilder()
 .setName("petequip")
-.setDescription("Equipar mascota")
-.addIntegerOption(o=>o.setName("id").setRequired(true))
+.setDescription("Equipar una mascota")
+.addIntegerOption(o =>
+  o.setName("id")
+   .setDescription("ID de la mascota que quieres equipar")
+   .setRequired(true)
+)
 
-].map(c=>c.toJSON())
+].map(c => c.toJSON())
 
 //////////////////////////////////////////////////
 // REGISTRAR SLASH
 //////////////////////////////////////////////////
 
-async function register(){
+async function register()
+{
 
- const rest=new REST({version:"10"}).setToken(TOKEN)
+ const rest = new REST({ version:"10" }).setToken(TOKEN)
 
  await rest.put(
   Routes.applicationCommands(CLIENT_ID),
-  {body:commands}
+  { body: commands }
  )
 
  console.log("Slash commands listos")
 
 }
-
 //////////////////////////////////////////////////
 // READY
 //////////////////////////////////////////////////
